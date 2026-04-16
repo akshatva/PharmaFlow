@@ -197,7 +197,7 @@ export async function createPurchaseOrderFromReorder(
 
   return {
     error: null,
-    success: "Purchase order created successfully.",
+    success: "Draft purchase order created successfully.",
   };
 }
 

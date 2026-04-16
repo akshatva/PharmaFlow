@@ -17,12 +17,16 @@ export default async function SettingsPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("email, alerts_email_enabled")
+    .select("email, alerts_email_enabled, phone_number, whatsapp_enabled")
     .eq("id", user.id)
     .maybeSingle();
 
   if (profileError) {
-    if (profileError.message.includes("alerts_email_enabled")) {
+    if (
+      profileError.message.includes("alerts_email_enabled") ||
+      profileError.message.includes("phone_number") ||
+      profileError.message.includes("whatsapp_enabled")
+    ) {
       return (
         <div className="space-y-6">
           <SectionIntro
@@ -32,7 +36,7 @@ export default async function SettingsPage() {
           />
           <SetupNotice
             title="Profile notification column not available yet"
-            description="Add the `alerts_email_enabled` column to the `profiles` table, then refresh the app to enable daily alerts email settings."
+            description="Add the notification fields to the `profiles` table, then refresh the app to enable email and WhatsApp alert settings."
           />
         </div>
       );
@@ -56,6 +60,8 @@ export default async function SettingsPage() {
       <AlertsEmailSettings
         email={profile?.email ?? user.email ?? "your account email"}
         initialEnabled={profile?.alerts_email_enabled ?? true}
+        initialPhoneNumber={profile?.phone_number ?? ""}
+        initialWhatsAppEnabled={profile?.whatsapp_enabled ?? false}
       />
     </div>
   );

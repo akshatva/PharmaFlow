@@ -39,7 +39,15 @@ type SupplierRecord = {
 };
 
 type PurchaseOrderRecord = {
+  id: string;
+  supplier_id: string;
+  created_at: string;
   reorder_source_id: string | null;
+};
+
+type PurchaseOrderItemRecord = {
+  purchase_order_id: string;
+  medicine_id: string;
 };
 
 type ReorderRow = {
@@ -48,6 +56,14 @@ type ReorderRow = {
   medicineName: string;
   currentStock: number;
   recentSales: number;
+  dailySalesVelocity: number;
+  daysOfStockLeft: number | null;
+  recommendation: "Reorder Now" | "Reorder Soon" | "Monitor" | "Avoid Reorder";
+  priority: "Urgent" | "High" | "Medium" | "Low";
+  suggestedQuantity: number;
+  suggestedSupplierId: string | null;
+  suggestedSupplierName: string | null;
+  supplierSuggestionNote: string | null;
   reason: string;
   status: "pending" | "ordered";
   createdAt: string;
@@ -59,6 +75,84 @@ function formatDate(value: string) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatDecimal(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  return new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: value >= 10 ? 0 : 1,
+  }).format(value);
+}
+
+function formatDaysOfStockLeft(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return `${formatDecimal(value)} days`;
+}
+
+function getSmartOrderingSuggestion({
+  currentStock,
+  recentSales,
+}: {
+  currentStock: number;
+  recentSales: number;
+}) {
+  const dailySalesVelocity = recentSales > 0 ? recentSales / 30 : 0;
+  const daysOfStockLeft =
+    dailySalesVelocity > 0 ? currentStock / dailySalesVelocity : null;
+
+  if (recentSales <= 0) {
+    return {
+      dailySalesVelocity,
+      daysOfStockLeft,
+      recommendation: "Avoid Reorder" as const,
+      priority: "Low" as const,
+      suggestedQuantity: 0,
+    };
+  }
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    return {
+      dailySalesVelocity,
+      daysOfStockLeft,
+      recommendation: "Reorder Now" as const,
+      priority: "Urgent" as const,
+      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 30)),
+    };
+  }
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
+    return {
+      dailySalesVelocity,
+      daysOfStockLeft,
+      recommendation: "Reorder Soon" as const,
+      priority: "High" as const,
+      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 21)),
+    };
+  }
+
+  if (currentStock < 20) {
+    return {
+      dailySalesVelocity,
+      daysOfStockLeft,
+      recommendation: "Monitor" as const,
+      priority: "Medium" as const,
+      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 15)),
+    };
+  }
+
+  return {
+    dailySalesVelocity,
+    daysOfStockLeft,
+    recommendation: "Avoid Reorder" as const,
+    priority: "Low" as const,
+    suggestedQuantity: 0,
+  };
 }
 
 export default async function ReordersPage() {
@@ -92,6 +186,7 @@ export default async function ReordersPage() {
     { data: salesRecords, error: salesError },
     { data: suppliers, error: suppliersError },
     { data: purchaseOrders, error: purchaseOrdersError },
+    { data: purchaseOrderItems, error: purchaseOrderItemsError },
   ] = await Promise.all([
     supabase
       .from("reorder_items")
@@ -114,12 +209,20 @@ export default async function ReordersPage() {
       .order("name", { ascending: true }),
     supabase
       .from("purchase_orders")
-      .select("reorder_source_id")
+      .select("id, supplier_id, created_at, reorder_source_id")
       .eq("organization_id", membership.organization_id),
+    supabase
+      .from("purchase_order_items")
+      .select("purchase_order_id, medicine_id"),
   ]);
 
   const dataError =
-    reorderError ?? batchError ?? salesError ?? suppliersError ?? purchaseOrdersError;
+    reorderError ??
+    batchError ??
+    salesError ??
+    suppliersError ??
+    purchaseOrdersError ??
+    purchaseOrderItemsError;
 
   if (dataError) {
     if (isMissingRelationError(reorderError, "reorder_items")) {
@@ -180,6 +283,14 @@ export default async function ReordersPage() {
   const stockByMedicine = new Map<string, number>();
   const salesByMedicine = new Map<string, number>();
   const purchaseOrderSourceIds = new Set<string>();
+  const purchaseOrdersById = new Map<string, PurchaseOrderRecord>();
+  const latestSupplierByMedicineId = new Map<
+    string,
+    { supplierId: string; supplierName: string | null; createdAt: string }
+  >();
+  const suppliersById = new Map(
+    ((suppliers ?? []) as SupplierRecord[]).map((supplier) => [supplier.id, supplier.name]),
+  );
 
   ((batchRecords ?? []) as BatchRecord[]).forEach((batch) => {
     stockByMedicine.set(
@@ -196,20 +307,62 @@ export default async function ReordersPage() {
   });
 
   ((purchaseOrders ?? []) as PurchaseOrderRecord[]).forEach((purchaseOrder) => {
+    purchaseOrdersById.set(purchaseOrder.id, purchaseOrder);
+
     if (purchaseOrder.reorder_source_id) {
       purchaseOrderSourceIds.add(purchaseOrder.reorder_source_id);
     }
   });
 
+  ((purchaseOrderItems ?? []) as PurchaseOrderItemRecord[]).forEach((item) => {
+    const purchaseOrder = purchaseOrdersById.get(item.purchase_order_id);
+
+    if (!purchaseOrder) {
+      return;
+    }
+
+    const existingSuggestion = latestSupplierByMedicineId.get(item.medicine_id);
+
+    if (
+      !existingSuggestion ||
+      new Date(purchaseOrder.created_at).getTime() >
+        new Date(existingSuggestion.createdAt).getTime()
+    ) {
+      latestSupplierByMedicineId.set(item.medicine_id, {
+        supplierId: purchaseOrder.supplier_id,
+        supplierName: suppliersById.get(purchaseOrder.supplier_id) ?? null,
+        createdAt: purchaseOrder.created_at,
+      });
+    }
+  });
+
   const rows: ReorderRow[] = ((reorderItems ?? []) as ReorderItemRecord[]).map((item) => {
     const medicine = Array.isArray(item.medicines) ? item.medicines[0] : item.medicines;
+    const currentStock = stockByMedicine.get(item.medicine_id) ?? 0;
+    const recentSales = salesByMedicine.get(item.medicine_id) ?? 0;
+    const orderingSuggestion = getSmartOrderingSuggestion({
+      currentStock,
+      recentSales,
+    });
+    const supplierSuggestion = latestSupplierByMedicineId.get(item.medicine_id);
+    const supplierSuggestionNote = supplierSuggestion
+      ? `Most recently used supplier for this medicine.`
+      : "No supplier history yet. Select a supplier manually.";
 
     return {
       id: item.id,
       medicineId: item.medicine_id,
       medicineName: medicine?.name ?? "Unknown medicine",
-      currentStock: stockByMedicine.get(item.medicine_id) ?? 0,
-      recentSales: salesByMedicine.get(item.medicine_id) ?? 0,
+      currentStock,
+      recentSales,
+      dailySalesVelocity: orderingSuggestion.dailySalesVelocity,
+      daysOfStockLeft: orderingSuggestion.daysOfStockLeft,
+      recommendation: orderingSuggestion.recommendation,
+      priority: orderingSuggestion.priority,
+      suggestedQuantity: orderingSuggestion.suggestedQuantity,
+      suggestedSupplierId: supplierSuggestion?.supplierId ?? null,
+      suggestedSupplierName: supplierSuggestion?.supplierName ?? null,
+      supplierSuggestionNote,
       reason: item.reason,
       status: item.status,
       createdAt: item.created_at,
@@ -284,19 +437,57 @@ export default async function ReordersPage() {
                       <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Recent sales (30d)</p>
                       <p className="mt-1 text-sm text-slate-700">{row.recentSales}</p>
                     </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Daily sales velocity</p>
+                      <p className="mt-1 text-sm text-slate-700">{formatDecimal(row.dailySalesVelocity)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Days of stock left</p>
+                      <p className="mt-1 text-sm text-slate-700">{formatDaysOfStockLeft(row.daysOfStockLeft)}</p>
+                    </div>
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
                     {row.reason}
                   </div>
 
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Recommendation</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">{row.recommendation}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Suggested quantity</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">
+                        {row.suggestedQuantity > 0 ? row.suggestedQuantity : "No draft suggested"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Suggested supplier</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">
+                        {row.suggestedSupplierName ?? "Select manually"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">{row.supplierSuggestionNote}</p>
+                    </div>
+                  </div>
+
                   <div className="mt-4">
-                    <CreatePoFromReorderForm
-                      reorderItemId={row.id}
-                      suggestedQuantity={Math.max(row.recentSales, 1)}
-                      suppliers={(suppliers ?? []) as SupplierRecord[]}
-                      disabled={purchaseOrderSourceIds.has(row.id)}
-                    />
+                    {row.recommendation === "Avoid Reorder" ? (
+                      <p className="text-xs font-medium text-slate-500">
+                        No draft suggested because recent sales are too low to justify a smart reorder.
+                      </p>
+                    ) : (
+                      <CreatePoFromReorderForm
+                        reorderItemId={row.id}
+                        suggestedQuantity={row.suggestedQuantity}
+                        suppliers={(suppliers ?? []) as SupplierRecord[]}
+                        suggestedSupplierId={row.suggestedSupplierId}
+                        suggestedSupplierName={row.suggestedSupplierName}
+                        recommendation={`${row.recommendation} • ${row.priority} priority`}
+                        supplierSuggestionNote={row.supplierSuggestionNote}
+                        disabled={purchaseOrderSourceIds.has(row.id)}
+                      />
+                    )}
                   </div>
                 </div>
               ))}
@@ -309,10 +500,13 @@ export default async function ReordersPage() {
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Recent Sales (30d)</th>
+                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Days Left</th>
+                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
+                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Suggested Supplier</th>
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Created</th>
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Create PO</th>
+                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Create Draft PO</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -328,6 +522,25 @@ export default async function ReordersPage() {
                         {row.recentSales}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                        {formatDaysOfStockLeft(row.daysOfStockLeft)}
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3">
+                        <div className="space-y-1">
+                          <p className="font-medium text-slate-900">{row.recommendation}</p>
+                          <p className="text-xs text-slate-500">
+                            {row.suggestedQuantity > 0
+                              ? `${row.suggestedQuantity} units suggested`
+                              : "No draft suggested"}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                        <div className="space-y-1">
+                          <p>{row.suggestedSupplierName ?? "Select manually"}</p>
+                          <p className="text-xs text-slate-500">{row.supplierSuggestionNote}</p>
+                        </div>
+                      </td>
+                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                         {row.reason}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
@@ -337,12 +550,20 @@ export default async function ReordersPage() {
                         <ReorderStatusForm reorderItemId={row.id} initialStatus={row.status} />
                       </td>
                       <td className="border-b border-slate-100 px-3 py-3">
-                        <CreatePoFromReorderForm
-                          reorderItemId={row.id}
-                          suggestedQuantity={Math.max(row.recentSales, 1)}
-                          suppliers={(suppliers ?? []) as SupplierRecord[]}
-                          disabled={purchaseOrderSourceIds.has(row.id)}
-                        />
+                        {row.recommendation === "Avoid Reorder" ? (
+                          <span className="text-xs font-medium text-slate-500">No draft suggested</span>
+                        ) : (
+                          <CreatePoFromReorderForm
+                            reorderItemId={row.id}
+                            suggestedQuantity={row.suggestedQuantity}
+                            suppliers={(suppliers ?? []) as SupplierRecord[]}
+                            suggestedSupplierId={row.suggestedSupplierId}
+                            suggestedSupplierName={row.suggestedSupplierName}
+                            recommendation={`${row.recommendation} • ${row.priority} priority`}
+                            supplierSuggestionNote={row.supplierSuggestionNote}
+                            disabled={purchaseOrderSourceIds.has(row.id)}
+                          />
+                        )}
                       </td>
                     </tr>
                   ))}

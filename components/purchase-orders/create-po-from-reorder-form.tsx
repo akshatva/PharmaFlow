@@ -14,6 +14,10 @@ type CreatePoFromReorderFormProps = {
   reorderItemId: string;
   suggestedQuantity: number;
   suppliers: SupplierOption[];
+  suggestedSupplierId?: string | null;
+  suggestedSupplierName?: string | null;
+  recommendation?: string;
+  supplierSuggestionNote?: string | null;
   disabled?: boolean;
 };
 
@@ -21,6 +25,10 @@ export function CreatePoFromReorderForm({
   reorderItemId,
   suggestedQuantity,
   suppliers,
+  suggestedSupplierId = null,
+  suggestedSupplierName = null,
+  recommendation,
+  supplierSuggestionNote = null,
   disabled = false,
 }: CreatePoFromReorderFormProps) {
   const router = useRouter();
@@ -51,12 +59,21 @@ export function CreatePoFromReorderForm({
 
   return (
     <div className="space-y-2">
+      {suggestedSupplierName ? (
+        <p className="text-xs text-slate-500">
+          Suggested supplier: <span className="font-medium text-slate-700">{suggestedSupplierName}</span>
+          {recommendation ? ` • ${recommendation}` : ""}
+        </p>
+      ) : supplierSuggestionNote ? (
+        <p className="text-xs text-slate-500">{supplierSuggestionNote}</p>
+      ) : null}
+
       <form action={handleSubmit} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <input type="hidden" name="reorderItemId" value={reorderItemId} />
         <select
           name="supplierId"
           required
-          defaultValue=""
+          defaultValue={suggestedSupplierId ?? ""}
           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100 sm:w-auto sm:min-w-[180px]"
         >
           <option value="" disabled>
@@ -83,7 +100,7 @@ export function CreatePoFromReorderForm({
           disabled={isPending}
           className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
-          {isPending ? "Creating..." : "Create PO"}
+          {isPending ? "Creating..." : "Create Draft PO"}
         </button>
       </form>
 

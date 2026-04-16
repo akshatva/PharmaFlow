@@ -72,10 +72,21 @@ type BatchIntelligenceRow = {
 
 type ReorderSuggestion = MedicineInsight & {
   dailySalesVelocity: number;
+  predictedDemand7Days: number;
+  predictedDemand30Days: number;
   daysOfStockLeft: number | null;
   recommendation: "Reorder Now" | "Reorder Soon" | "Monitor" | "Avoid Reorder";
   priority: "Urgent" | "High" | "Medium" | "Low";
+  suggestedQuantity: number;
   reason: string;
+};
+
+type ForecastRow = MedicineInsight & {
+  dailySalesAverage: number;
+  predictedDemand7Days: number;
+  predictedDemand30Days: number;
+  daysOfStockLeft: number | null;
+  coverageLabel: "Stock sufficient" | "Stock running low" | "Stock will run out soon";
 };
 
 function SummaryCard({
@@ -200,6 +211,17 @@ function getPriorityClasses(priority: ReorderSuggestion["priority"]) {
   }
 }
 
+function getForecastCoverageClasses(label: ForecastRow["coverageLabel"]) {
+  switch (label) {
+    case "Stock will run out soon":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "Stock running low":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+}
+
 function buildInsightsHref(severity: string | null, noSalesOnly: boolean) {
   const params = new URLSearchParams();
 
@@ -249,6 +271,31 @@ function formatDaysOfStockLeft(value: number | null) {
   }
 
   return `${formatDecimal(value)} days`;
+}
+
+function buildForecastRow(row: MedicineInsight): ForecastRow {
+  const dailySalesAverage = row.recentSales > 0 ? row.recentSales / 30 : 0;
+  const predictedDemand7Days = dailySalesAverage * 7;
+  const predictedDemand30Days = dailySalesAverage * 30;
+  const daysOfStockLeft =
+    dailySalesAverage > 0 ? row.currentStock / dailySalesAverage : null;
+
+  let coverageLabel: ForecastRow["coverageLabel"] = "Stock sufficient";
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    coverageLabel = "Stock will run out soon";
+  } else if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
+    coverageLabel = "Stock running low";
+  }
+
+  return {
+    ...row,
+    dailySalesAverage,
+    predictedDemand7Days,
+    predictedDemand30Days,
+    daysOfStockLeft,
+    coverageLabel,
+  };
 }
 
 function getDeadStockInsight(row: MedicineInsight): DeadStockInsight | null {
@@ -425,17 +472,21 @@ function getReorderSuggestion(
     return null;
   }
 
-  const dailySalesVelocity = row.recentSales > 0 ? row.recentSales / 30 : 0;
-  const daysOfStockLeft = dailySalesVelocity > 0 ? row.currentStock / dailySalesVelocity : null;
+  const forecast = buildForecastRow(row);
+  const dailySalesVelocity = forecast.dailySalesAverage;
+  const daysOfStockLeft = forecast.daysOfStockLeft;
   const deadStockRisk = deadStockRiskMap.get(row.id);
 
   if (deadStockRisk || row.recentSales === 0) {
     return {
       ...row,
       dailySalesVelocity,
+      predictedDemand7Days: forecast.predictedDemand7Days,
+      predictedDemand30Days: forecast.predictedDemand30Days,
       daysOfStockLeft,
       recommendation: "Avoid Reorder",
       priority: "Low",
+      suggestedQuantity: 0,
       reason: deadStockRisk
         ? `${deadStockRisk.severity} dead stock risk with ${row.currentStock} units in stock and ${row.recentSales} sold in the last 30 days.`
         : `No recent sales in the last 30 days, so replenishment is not recommended yet.`,
@@ -446,10 +497,15 @@ function getReorderSuggestion(
     return {
       ...row,
       dailySalesVelocity,
+      predictedDemand7Days: forecast.predictedDemand7Days,
+      predictedDemand30Days: forecast.predictedDemand30Days,
       daysOfStockLeft,
       recommendation: "Reorder Now",
       priority: "Urgent",
-      reason: `Only ${formatDecimal(daysOfStockLeft)} days of stock left with ${formatDecimal(dailySalesVelocity)} units sold per day on average.`,
+      suggestedQuantity: Math.max(1, Math.ceil(forecast.predictedDemand30Days)),
+      reason: `Only ${formatDecimal(daysOfStockLeft)} days of stock left. Forecast demand is ${formatDecimal(
+        forecast.predictedDemand7Days,
+      )} units over 7 days and ${formatDecimal(forecast.predictedDemand30Days)} over 30 days.`,
     };
   }
 
@@ -457,10 +513,15 @@ function getReorderSuggestion(
     return {
       ...row,
       dailySalesVelocity,
+      predictedDemand7Days: forecast.predictedDemand7Days,
+      predictedDemand30Days: forecast.predictedDemand30Days,
       daysOfStockLeft,
       recommendation: "Reorder Soon",
       priority: "High",
-      reason: `About ${formatDecimal(daysOfStockLeft)} days of stock left with steady sales over the last 30 days.`,
+      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 21)),
+      reason: `About ${formatDecimal(daysOfStockLeft)} days of stock left with forecast demand of ${formatDecimal(
+        forecast.predictedDemand30Days,
+      )} units over the next 30 days.`,
     };
   }
 
@@ -468,10 +529,15 @@ function getReorderSuggestion(
     return {
       ...row,
       dailySalesVelocity,
+      predictedDemand7Days: forecast.predictedDemand7Days,
+      predictedDemand30Days: forecast.predictedDemand30Days,
       daysOfStockLeft,
       recommendation: "Monitor",
       priority: "Medium",
-      reason: `Stock is moving, but current cover is still manageable. Monitor before placing a purchase order.`,
+      suggestedQuantity: Math.max(1, Math.ceil(forecast.predictedDemand7Days)),
+      reason: `Stock is still manageable, but forecast demand is ${formatDecimal(
+        forecast.predictedDemand7Days,
+      )} units over the next 7 days. Monitor before placing a purchase order.`,
     };
   }
 
@@ -641,6 +707,37 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     (row) => row.status === "Expired" || row.status === "Expiring Soon" || row.status === "Sell First",
   ).length;
 
+  const forecastRows = medicinesWithStock
+    .map(buildForecastRow)
+    .sort((a, b) => {
+      const coverageWeight = {
+        "Stock will run out soon": 3,
+        "Stock running low": 2,
+        "Stock sufficient": 1,
+      };
+      const coverageDifference =
+        coverageWeight[b.coverageLabel] - coverageWeight[a.coverageLabel];
+
+      if (coverageDifference !== 0) {
+        return coverageDifference;
+      }
+
+      if (a.daysOfStockLeft === null && b.daysOfStockLeft !== null) {
+        return 1;
+      }
+
+      if (a.daysOfStockLeft !== null && b.daysOfStockLeft === null) {
+        return -1;
+      }
+
+      if (a.daysOfStockLeft !== null && b.daysOfStockLeft !== null) {
+        return a.daysOfStockLeft - b.daysOfStockLeft;
+      }
+
+      return b.predictedDemand30Days - a.predictedDemand30Days;
+    })
+    .slice(0, 12);
+
   const reorderSuggestions = medicinesWithStock
     .map((row) => getReorderSuggestion(row, deadStockRiskMap))
     .filter((row): row is ReorderSuggestion => Boolean(row))
@@ -677,6 +774,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   const avoidReorderCount = reorderSuggestions.filter(
     (row) => row.recommendation === "Avoid Reorder",
   ).length;
+  const stockRunOutSoonCount = forecastRows.filter(
+    (row) => row.coverageLabel === "Stock will run out soon",
+  ).length;
+  const stockRunningLowCount = forecastRows.filter(
+    (row) => row.coverageLabel === "Stock running low",
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -698,6 +801,69 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         <SummaryCard label="Avoid Reorder" value={avoidReorderCount} />
         <SummaryCard label="Active Suggestions" value={reorderSuggestions.length} />
       </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <SummaryCard label="Forecast Runout Soon" value={stockRunOutSoonCount} />
+        <SummaryCard label="Forecast Running Low" value={stockRunningLowCount} />
+        <SummaryCard label="Forecast Rows" value={forecastRows.length} />
+      </div>
+
+      <InsightSection
+        title="Demand forecast"
+        description="Simple demand forecasting from the last 30 days of sales, with stock coverage labels to guide replenishment decisions."
+        emptyText="No forecast rows are available yet."
+      >
+        {forecastRows.length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+              <thead>
+                <tr className="text-slate-500">
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Daily Sales Avg</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 7-Day Demand</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 30-Day Demand</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Forecast Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forecastRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
+                      {row.medicineName}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {row.currentStock}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDecimal(row.dailySalesAverage)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDecimal(row.predictedDemand7Days)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDecimal(row.predictedDemand30Days)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDaysOfStockLeft(row.daysOfStockLeft)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getForecastCoverageClasses(
+                          row.coverageLabel,
+                        )}`}
+                      >
+                        {row.coverageLabel}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </InsightSection>
 
       <InsightSection
         title="Fast-moving medicines"
@@ -924,8 +1090,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Recent Sales (30d)</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Daily Sales Velocity</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 7-Day Demand</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 30-Day Demand</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Suggested Quantity</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Action</th>
                 </tr>
@@ -949,6 +1118,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       {formatDecimal(row.dailySalesVelocity)}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDecimal(row.predictedDemand7Days)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {formatDecimal(row.predictedDemand30Days)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                       {formatDaysOfStockLeft(row.daysOfStockLeft)}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3">
@@ -957,6 +1132,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       >
                         {row.recommendation}
                       </span>
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {row.suggestedQuantity > 0 ? row.suggestedQuantity : "—"}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3">
                       <span
