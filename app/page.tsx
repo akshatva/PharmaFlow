@@ -1,12 +1,13 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { PharmaFlowLandingPage } from "@/components/marketing/pharmaflow-landing-page";
 
-export default async function HomePage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export const metadata: Metadata = {
+  title: "PharmaFlow | Pharmacy Operations System",
+  description:
+    "PharmaFlow helps pharmacy teams manage inventory, expiry, reordering, suppliers, purchase orders, forecasting, and daily workflows in one place.",
+};
 
-  redirect(user ? "/onboarding" : "/sign-in");
+export default function HomePage() {
+  return <PharmaFlowLandingPage />;
 }
