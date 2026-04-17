@@ -133,6 +133,108 @@ function SortButton({
   );
 }
 
+function Toast({
+  tone,
+  message,
+  onClose,
+}: {
+  tone: "success" | "error";
+  message: string;
+  onClose: () => void;
+}) {
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-red-200 bg-red-50 text-red-800";
+
+  return (
+    <div className="fixed right-4 top-4 z-50 max-w-sm">
+      <div className={`rounded-2xl border px-4 py-3 shadow-lg ${toneClasses}`}>
+        <div className="flex items-start gap-3">
+          <p className="flex-1 text-sm font-medium leading-6">{message}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold uppercase tracking-[0.16em] opacity-70 transition hover:opacity-100"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClearInventoryModal({
+  batchCount,
+  confirmationText,
+  onConfirmationTextChange,
+  isPending,
+  onCancel,
+  onConfirm,
+}: {
+  batchCount: number;
+  confirmationText: string;
+  onConfirmationTextChange: (value: string) => void;
+  isPending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const canConfirm = confirmationText.trim() === "DELETE" && !isPending;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+      <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <h3 className="text-xl font-semibold text-slate-950">Clear Inventory</h3>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Are you sure? This will delete all inventory batches.
+        </p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          This action only clears inventory batch rows for your organization. Medicines, suppliers,
+          and purchase orders will stay untouched.
+        </p>
+        <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {batchCount} batch{batchCount === 1 ? "" : "es"} will be deleted. Type <span className="font-semibold">DELETE</span> to confirm.
+        </p>
+
+        <div className="mt-5 space-y-2">
+          <label className="text-sm font-medium text-slate-800" htmlFor="clear-inventory-confirmation">
+            Confirmation
+          </label>
+          <input
+            id="clear-inventory-confirmation"
+            type="text"
+            value={confirmationText}
+            onChange={(event) => onConfirmationTextChange(event.target.value)}
+            placeholder="Type DELETE"
+            disabled={isPending}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+          />
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isPending}
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            No, keep inventory
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            className="inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPending ? "Clearing..." : "Yes, clear inventory"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InventoryEditFields({
   row,
   formId,
@@ -213,6 +315,9 @@ export function InventoryTable({
     error: null,
     success: null,
   });
+  const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [showClearInventoryModal, setShowClearInventoryModal] = useState(false);
+  const [clearInventoryConfirmationText, setClearInventoryConfirmationText] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -347,6 +452,77 @@ export function InventoryTable({
     });
   }
 
+  function closeClearInventoryModal() {
+    if (isPending) {
+      return;
+    }
+
+    setShowClearInventoryModal(false);
+    setClearInventoryConfirmationText("");
+  }
+
+  function handleOpenClearInventoryModal() {
+    setFeedback({ error: null, success: null });
+    setToast(null);
+    setShowClearInventoryModal(true);
+    setClearInventoryConfirmationText("");
+  }
+
+  async function handleClearInventory() {
+    startTransition(async () => {
+      setFeedback({ error: null, success: null });
+      setToast(null);
+
+      try {
+        const response = await fetch("/api/inventory/clear", {
+          method: "POST",
+        });
+        const payload = (await response.json()) as {
+          error?: string;
+          success?: boolean;
+          message?: string;
+          deleted_count?: number;
+        };
+
+        if (!response.ok) {
+          const errorMessage = payload.error ?? "Unable to clear inventory.";
+          console.error("[inventory-clear] request failed", payload);
+          setFeedback({ error: errorMessage, success: null });
+          setToast({ tone: "error", message: errorMessage });
+          return;
+        }
+
+        const successMessage =
+          payload.deleted_count && payload.deleted_count > 0
+            ? `Inventory cleared successfully. ${payload.deleted_count} batch${payload.deleted_count === 1 ? "" : "es"} deleted.`
+            : payload.message ?? "Inventory cleared successfully.";
+
+        console.info("[inventory-clear] request succeeded", payload);
+        setFeedback({ error: null, success: successMessage });
+        setToast({
+          tone: "success",
+          message:
+            payload.deleted_count && payload.deleted_count > 0
+              ? "Inventory cleared successfully"
+              : "No inventory batches were deleted",
+        });
+        setShowClearInventoryModal(false);
+        setClearInventoryConfirmationText("");
+        router.refresh();
+      } catch {
+        console.error("[inventory-clear] request threw unexpectedly");
+        setFeedback({
+          error: "Unable to clear inventory.",
+          success: null,
+        });
+        setToast({
+          tone: "error",
+          message: "Unable to clear inventory.",
+        });
+      }
+    });
+  }
+
   function resetInventoryView() {
     setQuery("");
     setStatusFilter("all");
@@ -356,6 +532,21 @@ export function InventoryTable({
 
   return (
     <section className="space-y-6">
+      {toast ? (
+        <Toast tone={toast.tone} message={toast.message} onClose={() => setToast(null)} />
+      ) : null}
+
+      {showClearInventoryModal ? (
+        <ClearInventoryModal
+          batchCount={rows.length}
+          confirmationText={clearInventoryConfirmationText}
+          onConfirmationTextChange={setClearInventoryConfirmationText}
+          isPending={isPending}
+          onCancel={closeClearInventoryModal}
+          onConfirm={handleClearInventory}
+        />
+      ) : null}
+
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
@@ -508,18 +699,28 @@ export function InventoryTable({
               </p>
             </div>
 
-            <div className="w-full xl:max-w-md">
-              <label className="mb-2 block text-sm font-medium text-slate-800" htmlFor="inventory-search">
+            <div className="flex w-full flex-col gap-3 xl:max-w-xl">
+              <label className="text-sm font-medium text-slate-800" htmlFor="inventory-search">
                 Search
               </label>
-              <input
-                id="inventory-search"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by medicine, batch number, or SKU"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
-              />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="inventory-search"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search by medicine, batch number, or SKU"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleOpenClearInventoryModal}
+                  disabled={isPending || rows.length === 0}
+                  className="inline-flex shrink-0 items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isPending && showClearInventoryModal ? "Clearing..." : "Clear Inventory"}
+                </button>
+              </div>
             </div>
           </div>
 

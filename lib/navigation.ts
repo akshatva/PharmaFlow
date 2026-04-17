@@ -1,5 +1,6 @@
 export const appNavigation = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/forecast", label: "Forecast", icon: "forecast" },
   { href: "/scan", label: "Scan", icon: "scan" },
   { href: "/inventory", label: "Inventory", icon: "inventory" },
   { href: "/sales", label: "Sales", icon: "sales" },

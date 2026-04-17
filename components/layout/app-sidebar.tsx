@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 const icons = {
   dashboard: LayoutDashboard,
+  forecast: BarChart3,
   scan: ScanLine,
   inventory: Boxes,
   sales: ShoppingCart,
