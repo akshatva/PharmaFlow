@@ -144,8 +144,8 @@ export default async function ForecastPage() {
             description="Review predicted demand, stock coverage, selected models, and confidence before acting on replenishment decisions."
           />
           <SetupNotice
-            title="Forecasting table not available yet"
-            description="The `forecast_results` table is missing in your connected Supabase project. Run the Layer 1 and Layer 2 forecast SQL, generate forecasts, and refresh the app."
+            title="Forecasting is not set up in Supabase yet"
+            description="This workspace is missing the `forecast_results` table, so PharmaFlow cannot show saved forecast output yet. Apply the forecast migration, generate forecasts, and refresh this page. Until then, the rest of the app will continue using the existing rules-based inventory and reorder logic."
           />
         </div>
       );
@@ -227,7 +227,8 @@ export default async function ForecastPage() {
 
         {rows.length === 0 ? (
           <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            No medicines are available for forecasting yet.
+            No saved forecast output is available yet. Generate forecasts after you have medicine
+            and sales data, then refresh this page.
           </div>
         ) : (
           <div className="mt-6 overflow-x-auto">

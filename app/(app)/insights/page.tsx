@@ -2,15 +2,28 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { SectionIntro } from "@/components/layout/section-intro";
+import { ExportButton } from "@/components/reports/export-button";
+import { InsightWorkflowForm } from "@/components/insights/insight-workflow-form";
 import { SetupNotice } from "@/components/layout/setup-notice";
 import { ReorderButton } from "@/components/reorders/reorder-button";
-import { isMissingRelationError } from "@/lib/supabase/errors";
+import {
+  getInsightWorkflowKey,
+  getInsightWorkflowStatusLabel,
+  type InsightWorkflowStatus,
+  type InsightWorkflowType,
+} from "@/services/insights";
+import {
+  REORDER_TRANSPARENCY_COPY,
+  getRulesBasedReorderDecision,
+} from "@/services/inventory";
+import { isMissingColumnError, isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type InsightsPageProps = {
   searchParams?: Promise<{
     severity?: string;
     noSalesOnly?: string;
+    workflow?: string;
   }>;
 };
 
@@ -25,6 +38,8 @@ type BatchRecord = {
   batch_number: string;
   quantity: number;
   expiry_date: string;
+  purchase_price: number | null;
+  last_imported_at: string | null;
   medicines:
     | {
         name: string;
@@ -35,6 +50,20 @@ type BatchRecord = {
     | null;
 };
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "No CSV import refresh recorded yet";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 type SalesRecord = {
   medicine_id: string;
   quantity_sold: number;
@@ -42,6 +71,14 @@ type SalesRecord = {
 
 type ReorderRecord = {
   medicine_id: string;
+};
+
+type InsightWorkflowRecord = {
+  insight_key: string;
+  insight_type: InsightWorkflowType;
+  medicine_id: string | null;
+  inventory_batch_id: string | null;
+  status: Exclude<InsightWorkflowStatus, "open">;
 };
 
 type MedicineInsight = {
@@ -71,14 +108,15 @@ type BatchIntelligenceRow = {
 };
 
 type ReorderSuggestion = MedicineInsight & {
-  dailySalesVelocity: number;
-  predictedDemand7Days: number;
-  predictedDemand30Days: number;
+  averageDailySales30d: number | null;
   daysOfStockLeft: number | null;
+  status: "Ready" | "Not enough recent sales data";
   recommendation: "Reorder Now" | "Reorder Soon" | "Monitor" | "Avoid Reorder";
   priority: "Urgent" | "High" | "Medium" | "Low";
-  suggestedQuantity: number;
+  recommendedReorderQuantity: number | null;
   reason: string;
+  confidenceNote: string;
+  actionable: boolean;
 };
 
 type ForecastRow = MedicineInsight & {
@@ -89,17 +127,47 @@ type ForecastRow = MedicineInsight & {
   coverageLabel: "Stock sufficient" | "Stock running low" | "Stock will run out soon";
 };
 
+type InsightWorkflowItem = {
+  key: string;
+  insightType: InsightWorkflowType;
+  workflowStatus: InsightWorkflowStatus;
+  medicineId: string | null;
+  inventoryBatchId: string | null;
+  medicineName: string;
+  title: string;
+  summary: string;
+};
+
+type PriorityItem = {
+  key: string;
+  insightType: "stockout_risk" | "expiry_risk" | "reorder_suggestion";
+  workflowStatus: InsightWorkflowStatus;
+  medicineId: string | null;
+  inventoryBatchId: string | null;
+  medicineName: string;
+  issueTypeLabel: string;
+  urgencyLabel: string;
+  reason: string;
+  severity: "Critical" | "Warning" | "Safe";
+  sortOrder: number;
+};
+
 function SummaryCard({
   label,
   value,
+  helperText,
 }: {
   label: string;
-  value: number;
+  value: number | string;
+  helperText?: string;
 }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
       <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+      {helperText ? (
+        <p className="mt-2 text-sm leading-6 text-slate-600">{helperText}</p>
+      ) : null}
     </div>
   );
 }
@@ -158,18 +226,6 @@ function FilterLink({
   );
 }
 
-function getDeadStockSeverityClasses(severity: DeadStockInsight["severity"]) {
-  if (severity === "High") {
-    return "border-red-200 bg-red-50 text-red-700";
-  }
-
-  if (severity === "Medium") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-
-  return "border-slate-200 bg-slate-50 text-slate-700";
-}
-
 function getBatchStatusClasses(status: BatchIntelligenceRow["status"]) {
   switch (status) {
     case "Expired":
@@ -198,17 +254,12 @@ function getReorderRecommendationClasses(
   }
 }
 
-function getPriorityClasses(priority: ReorderSuggestion["priority"]) {
-  switch (priority) {
-    case "Urgent":
-      return "border-red-200 bg-red-50 text-red-700";
-    case "High":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "Medium":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
+function getReorderStatusClasses(status: ReorderSuggestion["status"]) {
+  if (status === "Not enough recent sales data") {
+    return "border-slate-200 bg-slate-50 text-slate-700";
   }
+
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
 function getForecastCoverageClasses(label: ForecastRow["coverageLabel"]) {
@@ -222,7 +273,39 @@ function getForecastCoverageClasses(label: ForecastRow["coverageLabel"]) {
   }
 }
 
-function buildInsightsHref(severity: string | null, noSalesOnly: boolean) {
+function getWorkflowStatusClasses(status: InsightWorkflowStatus) {
+  switch (status) {
+    case "reviewed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "needs_reorder":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "monitor":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+}
+
+function getSeverityClasses(severity: PriorityItem["severity"]) {
+  switch (severity) {
+    case "Critical":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "Warning":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+}
+
+function buildWorkflowInsightsHref({
+  severity,
+  noSalesOnly,
+  workflow,
+}: {
+  severity: string | null;
+  noSalesOnly: boolean;
+  workflow: "all" | InsightWorkflowStatus;
+}) {
   const params = new URLSearchParams();
 
   if (severity) {
@@ -231,6 +314,10 @@ function buildInsightsHref(severity: string | null, noSalesOnly: boolean) {
 
   if (noSalesOnly) {
     params.set("noSalesOnly", "true");
+  }
+
+  if (workflow !== "all") {
+    params.set("workflow", workflow);
   }
 
   const query = params.toString();
@@ -262,6 +349,14 @@ function formatDecimal(value: number) {
   return new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
   }).format(value);
 }
 
@@ -464,84 +559,32 @@ function getBatchIntelligenceRows(records: BatchRecord[]) {
     .slice(0, 12);
 }
 
-function getReorderSuggestion(
-  row: MedicineInsight,
-  deadStockRiskMap: Map<string, DeadStockInsight>,
-): ReorderSuggestion | null {
-  if (row.currentStock <= 0) {
+function getReorderSuggestion(row: MedicineInsight): ReorderSuggestion | null {
+  if (row.currentStock <= 0 && row.recentSales <= 0) {
     return null;
   }
 
-  const forecast = buildForecastRow(row);
-  const dailySalesVelocity = forecast.dailySalesAverage;
-  const daysOfStockLeft = forecast.daysOfStockLeft;
-  const deadStockRisk = deadStockRiskMap.get(row.id);
+  const decision = getRulesBasedReorderDecision({
+    currentStock: row.currentStock,
+    recentSales30d: row.recentSales,
+  });
 
-  if (deadStockRisk || row.recentSales === 0) {
-    return {
-      ...row,
-      dailySalesVelocity,
-      predictedDemand7Days: forecast.predictedDemand7Days,
-      predictedDemand30Days: forecast.predictedDemand30Days,
-      daysOfStockLeft,
-      recommendation: "Avoid Reorder",
-      priority: "Low",
-      suggestedQuantity: 0,
-      reason: deadStockRisk
-        ? `${deadStockRisk.severity} dead stock risk with ${row.currentStock} units in stock and ${row.recentSales} sold in the last 30 days.`
-        : `No recent sales in the last 30 days, so replenishment is not recommended yet.`,
-    };
-  }
-
-  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
-    return {
-      ...row,
-      dailySalesVelocity,
-      predictedDemand7Days: forecast.predictedDemand7Days,
-      predictedDemand30Days: forecast.predictedDemand30Days,
-      daysOfStockLeft,
-      recommendation: "Reorder Now",
-      priority: "Urgent",
-      suggestedQuantity: Math.max(1, Math.ceil(forecast.predictedDemand30Days)),
-      reason: `Only ${formatDecimal(daysOfStockLeft)} days of stock left. Forecast demand is ${formatDecimal(
-        forecast.predictedDemand7Days,
-      )} units over 7 days and ${formatDecimal(forecast.predictedDemand30Days)} over 30 days.`,
-    };
-  }
-
-  if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
-    return {
-      ...row,
-      dailySalesVelocity,
-      predictedDemand7Days: forecast.predictedDemand7Days,
-      predictedDemand30Days: forecast.predictedDemand30Days,
-      daysOfStockLeft,
-      recommendation: "Reorder Soon",
-      priority: "High",
-      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 21)),
-      reason: `About ${formatDecimal(daysOfStockLeft)} days of stock left with forecast demand of ${formatDecimal(
-        forecast.predictedDemand30Days,
-      )} units over the next 30 days.`,
-    };
-  }
-
-  if (row.currentStock < 20 || (daysOfStockLeft !== null && daysOfStockLeft <= 30)) {
-    return {
-      ...row,
-      dailySalesVelocity,
-      predictedDemand7Days: forecast.predictedDemand7Days,
-      predictedDemand30Days: forecast.predictedDemand30Days,
-      daysOfStockLeft,
-      recommendation: "Monitor",
-      priority: "Medium",
-      suggestedQuantity: Math.max(1, Math.ceil(forecast.predictedDemand7Days)),
-      reason: `Stock is still manageable, but forecast demand is ${formatDecimal(
-        forecast.predictedDemand7Days,
-      )} units over the next 7 days. Monitor before placing a purchase order.`,
-    };
-  }
-
-  return null;
+  return {
+    ...row,
+    averageDailySales30d: decision.averageDailySales30d,
+    daysOfStockLeft: decision.daysOfStockLeft,
+    status:
+      decision.availability === "available" ? "Ready" : "Not enough recent sales data",
+    recommendation: decision.recommendation,
+    priority: decision.priority,
+    recommendedReorderQuantity: decision.recommendedReorderQuantity,
+    reason: decision.explainabilityNote,
+    confidenceNote: decision.confidenceNote,
+    actionable:
+      decision.availability === "available" &&
+      (decision.recommendedReorderQuantity ?? 0) > 0 &&
+      decision.recommendation !== "Avoid Reorder",
+  };
 }
 
 export default async function InsightsPage({ searchParams }: InsightsPageProps) {
@@ -553,6 +596,13 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       ? resolvedSearchParams.severity
       : "all";
   const noSalesOnly = resolvedSearchParams.noSalesOnly === "true";
+  const workflowFilter =
+    resolvedSearchParams.workflow === "open" ||
+    resolvedSearchParams.workflow === "reviewed" ||
+    resolvedSearchParams.workflow === "needs_reorder" ||
+    resolvedSearchParams.workflow === "monitor"
+      ? resolvedSearchParams.workflow
+      : "all";
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -580,9 +630,10 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
   const [
     { data: medicines, error: medicinesError },
-    { data: inventoryBatches, error: inventoryError },
+    inventoryQuery,
     { data: recentSales, error: salesError },
     { data: reorderItems, error: reorderError },
+    { data: workflowItems, error: workflowError },
   ] = await Promise.all([
     supabase
       .from("medicines")
@@ -591,7 +642,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       .order("name", { ascending: true }),
     supabase
       .from("inventory_batches")
-      .select("id, medicine_id, batch_number, quantity, expiry_date, medicines(name)")
+      .select(
+        "id, medicine_id, batch_number, quantity, expiry_date, purchase_price, last_imported_at, medicines(name)",
+      )
       .eq("organization_id", membership.organization_id),
     supabase
       .from("sales_records")
@@ -603,11 +656,50 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       .select("medicine_id")
       .eq("organization_id", membership.organization_id)
       .eq("status", "pending"),
+    supabase
+      .from("insight_workflow_items")
+      .select("insight_key, insight_type, medicine_id, inventory_batch_id, status")
+      .eq("organization_id", membership.organization_id),
   ]);
 
-  const dataError = medicinesError ?? inventoryError ?? salesError ?? reorderError;
+  let inventoryBatches = inventoryQuery.data as BatchRecord[] | null;
+  let inventoryError = inventoryQuery.error;
+
+  if (isMissingColumnError(inventoryQuery.error, "last_imported_at")) {
+    const fallbackInventoryQuery = await supabase
+      .from("inventory_batches")
+      .select(
+        "id, medicine_id, batch_number, quantity, expiry_date, purchase_price, medicines(name)",
+      )
+      .eq("organization_id", membership.organization_id);
+
+    inventoryBatches = ((fallbackInventoryQuery.data ?? []) as BatchRecord[]).map((batch) => ({
+      ...batch,
+      last_imported_at: null,
+    }));
+    inventoryError = fallbackInventoryQuery.error;
+  }
+
+  const dataError =
+    medicinesError ?? inventoryError ?? salesError ?? reorderError ?? workflowError;
 
   if (dataError) {
+    if (isMissingRelationError(workflowError, "insight_workflow_items")) {
+      return (
+        <div className="space-y-6">
+          <SectionIntro
+            eyebrow="Visibility"
+            title="Insights"
+            description="Movement-based inventory signals using current stock and the last 30 days of sales activity."
+          />
+          <SetupNotice
+            title="Insight workflow setup is missing"
+            description="The `insight_workflow_items` table is missing in your connected Supabase project. Run the workflow SQL migration, reload the schema, and refresh the app."
+          />
+        </div>
+      );
+    }
+
     if (isMissingRelationError(reorderError, "reorder_items")) {
       return (
         <div className="space-y-6">
@@ -636,6 +728,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   const pendingReorderMedicineIds = new Set(
     ((reorderItems ?? []) as ReorderRecord[]).map((item) => item.medicine_id),
   );
+  const workflowStatusByKey = new Map<string, InsightWorkflowStatus>(
+    ((workflowItems ?? []) as InsightWorkflowRecord[]).map((item) => [item.insight_key, item.status]),
+  );
 
   ((inventoryBatches ?? []) as BatchRecord[]).forEach((batch) => {
     stockByMedicine.set(
@@ -660,16 +755,6 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
   const medicinesWithStock = insights.filter((row) => row.currentStock > 0);
 
-  const fastMoving = [...insights]
-    .filter((row) => row.recentSales > 0)
-    .sort((a, b) => b.recentSales - a.recentSales)
-    .slice(0, 5);
-
-  const slowMoving = [...medicinesWithStock]
-    .filter((row) => row.recentSales > 0 && row.recentSales <= 5)
-    .sort((a, b) => a.recentSales - b.recentSales || b.currentStock - a.currentStock)
-    .slice(0, 8);
-
   const deadStockRisk = medicinesWithStock
     .map(getDeadStockInsight)
     .filter((row): row is DeadStockInsight => Boolean(row))
@@ -688,25 +773,23 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       return b.currentStock - a.currentStock;
     });
 
-  const deadStockRiskMap = new Map(deadStockRisk.map((row) => [row.id, row]));
-
-  const filteredDeadStockRisk = deadStockRisk.filter((row) => {
-    if (noSalesOnly && !row.noSales) {
-      return false;
-    }
-
-    if (severityFilter === "all") {
-      return true;
-    }
-
-    return row.severity.toLowerCase() === severityFilter;
-  });
-
   const batchIntelligenceRows = getBatchIntelligenceRows((inventoryBatches ?? []) as BatchRecord[]);
-  const urgentBatchCount = batchIntelligenceRows.filter(
-    (row) => row.status === "Expired" || row.status === "Expiring Soon" || row.status === "Sell First",
-  ).length;
+  const latestInventoryImportAt = ((inventoryBatches ?? []) as BatchRecord[]).reduce<string | null>(
+    (latest, batch) => {
+      if (!batch.last_imported_at) {
+        return latest;
+      }
 
+      if (!latest) {
+        return batch.last_imported_at;
+      }
+
+      return new Date(batch.last_imported_at).getTime() > new Date(latest).getTime()
+        ? batch.last_imported_at
+        : latest;
+    },
+    null,
+  );
   const forecastRows = medicinesWithStock
     .map(buildForecastRow)
     .sort((a, b) => {
@@ -738,8 +821,8 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     })
     .slice(0, 12);
 
-  const reorderSuggestions = medicinesWithStock
-    .map((row) => getReorderSuggestion(row, deadStockRiskMap))
+  const reorderSuggestions = insights
+    .map((row) => getReorderSuggestion(row))
     .filter((row): row is ReorderSuggestion => Boolean(row))
     .sort((a, b) => {
       const priorityWeight = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
@@ -747,6 +830,10 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
       if (priorityDifference !== 0) {
         return priorityDifference;
+      }
+
+      if (a.actionable !== b.actionable) {
+        return a.actionable ? -1 : 1;
       }
 
       if (a.daysOfStockLeft === null && b.daysOfStockLeft !== null) {
@@ -765,21 +852,148 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     })
     .slice(0, 10);
 
-  const urgentReorderCount = reorderSuggestions.filter(
-    (row) => row.recommendation === "Reorder Now",
-  ).length;
-  const reorderSoonCount = reorderSuggestions.filter(
-    (row) => row.recommendation === "Reorder Soon",
-  ).length;
-  const avoidReorderCount = reorderSuggestions.filter(
-    (row) => row.recommendation === "Avoid Reorder",
-  ).length;
   const stockRunOutSoonCount = forecastRows.filter(
     (row) => row.coverageLabel === "Stock will run out soon",
   ).length;
-  const stockRunningLowCount = forecastRows.filter(
-    (row) => row.coverageLabel === "Stock running low",
+  const atRiskBatchIds = new Set(
+    batchIntelligenceRows
+      .filter((row) => row.status === "Expired" || row.status === "Expiring Soon")
+      .map((row) => row.id),
+  );
+  const slowMovingMedicineIds = new Set(deadStockRisk.map((row) => row.id));
+  const atRiskInventoryValue = ((inventoryBatches ?? []) as BatchRecord[]).reduce((sum, batch) => {
+    const isNearExpiry = atRiskBatchIds.has(batch.id);
+    const isSlowMoving = slowMovingMedicineIds.has(batch.medicine_id);
+
+    if (
+      batch.quantity <= 0 ||
+      batch.purchase_price === null ||
+      (!isNearExpiry && !isSlowMoving)
+    ) {
+      return sum;
+    }
+
+    return sum + batch.quantity * batch.purchase_price;
+  }, 0);
+  const reorderRecommendationCount = reorderSuggestions.filter(
+    (row) => row.actionable && (row.recommendedReorderQuantity ?? 0) > 0,
   ).length;
+  const stockoutRiskRows = forecastRows
+    .filter((row) => row.coverageLabel !== "Stock sufficient")
+    .slice(0, 12);
+  const nearExpiryRows = batchIntelligenceRows
+    .filter((row) => row.status !== "Normal")
+    .slice(0, 12);
+
+  const priorityItems: PriorityItem[] = [];
+
+  stockoutRiskRows.forEach((row) => {
+    const key = getInsightWorkflowKey({
+      insightType: "stockout_risk",
+      medicineId: row.id,
+    });
+
+    priorityItems.push({
+      key,
+      insightType: "stockout_risk",
+      workflowStatus: workflowStatusByKey.get(key) ?? "open",
+      medicineId: row.id,
+      inventoryBatchId: null,
+      medicineName: row.medicineName,
+      issueTypeLabel: "Stockout risk",
+      urgencyLabel:
+        row.daysOfStockLeft === null
+          ? "Stock cover unavailable"
+          : `Runs out in ${formatDaysOfStockLeft(row.daysOfStockLeft)}`,
+      reason: `Stock will run out in ${formatDaysOfStockLeft(row.daysOfStockLeft)} at the recent sales pace.`,
+      severity: row.coverageLabel === "Stock will run out soon" ? "Critical" : "Warning",
+      sortOrder: row.daysOfStockLeft ?? 999,
+    });
+  });
+
+  nearExpiryRows.forEach((row) => {
+    const key = getInsightWorkflowKey({
+      insightType: "expiry_risk",
+      inventoryBatchId: row.id,
+    });
+
+    priorityItems.push({
+      key,
+      insightType: "expiry_risk",
+      workflowStatus: workflowStatusByKey.get(key) ?? "open",
+      medicineId: row.medicineId,
+      inventoryBatchId: row.id,
+      medicineName: row.medicineName,
+      issueTypeLabel: "Expiry risk",
+      urgencyLabel:
+        row.daysUntilExpiry < 0
+          ? "Expired"
+          : `Expires in ${row.daysUntilExpiry} day${row.daysUntilExpiry === 1 ? "" : "s"}`,
+      reason:
+        row.daysUntilExpiry < 0
+          ? `Expired batch ${row.batchNumber} still has ${row.quantity} units remaining.`
+          : `Expires in ${row.daysUntilExpiry} days with ${row.quantity} units remaining.`,
+      severity: row.daysUntilExpiry < 0 || row.status === "Expiring Soon" ? "Critical" : "Warning",
+      sortOrder: row.daysUntilExpiry < 0 ? -1000 : row.daysUntilExpiry,
+    });
+  });
+
+  reorderSuggestions
+    .filter((row) => row.actionable)
+    .forEach((row) => {
+      const key = getInsightWorkflowKey({
+        insightType: "reorder_suggestion",
+        medicineId: row.id,
+      });
+
+      priorityItems.push({
+        key,
+        insightType: "reorder_suggestion",
+        workflowStatus: workflowStatusByKey.get(key) ?? "open",
+        medicineId: row.id,
+        inventoryBatchId: null,
+        medicineName: row.medicineName,
+        issueTypeLabel: "Reorder suggestion",
+        urgencyLabel:
+          row.daysOfStockLeft === null
+            ? "Review now"
+            : `Cover left: ${formatDaysOfStockLeft(row.daysOfStockLeft)}`,
+        reason:
+          row.recommendedReorderQuantity === null
+            ? row.reason
+            : `${row.reason} Suggested reorder: ${row.recommendedReorderQuantity} units.`,
+        severity: row.recommendation === "Reorder Now" ? "Critical" : "Warning",
+        sortOrder: row.daysOfStockLeft ?? 999,
+      });
+    });
+
+  const workflowCounts = {
+    open: priorityItems.filter((item) => item.workflowStatus === "open").length,
+    reviewed: priorityItems.filter((item) => item.workflowStatus === "reviewed").length,
+    needs_reorder: priorityItems.filter((item) => item.workflowStatus === "needs_reorder").length,
+    monitor: priorityItems.filter((item) => item.workflowStatus === "monitor").length,
+  };
+  const actionableInsightCount = workflowCounts.open;
+  const filteredPriorityItems = priorityItems
+    .filter((item) => {
+      if (workflowFilter === "all") {
+        return true;
+      }
+
+      return item.workflowStatus === workflowFilter;
+    })
+    .sort((first, second) => {
+      if (first.workflowStatus === "open" && second.workflowStatus !== "open") {
+        return -1;
+      }
+
+      if (first.workflowStatus !== "open" && second.workflowStatus === "open") {
+        return 1;
+      }
+
+      return first.sortOrder - second.sortOrder;
+    })
+    .slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -788,47 +1002,195 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         title="Insights"
         description="Movement-based inventory signals using current stock, batch expiry, and the last 30 days of sales activity."
       />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Fast-Moving Medicines" value={fastMoving.length} />
-        <SummaryCard label="Dead Stock Risk" value={deadStockRisk.length} />
-        <SummaryCard label="Urgent Batches" value={urgentBatchCount} />
-        <SummaryCard label="Urgent Reorders" value={urgentReorderCount} />
+      <div className="flex flex-wrap gap-3">
+        <ExportButton href="/api/exports/low-stock" label="Export Low Stock Report" />
+        <ExportButton href="/api/exports/expiry" label="Export Expiry Report" />
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">
+        Inventory data last updated on{" "}
+        <span className="font-medium text-slate-900">{formatDateTime(latestInventoryImportAt)}</span>.
+        Sales-based insights and reorder signals on this page are based on the last 30 days of sales
+        unless a section explicitly says otherwise.
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <SummaryCard label="Reorder Soon" value={reorderSoonCount} />
-        <SummaryCard label="Avoid Reorder" value={avoidReorderCount} />
-        <SummaryCard label="Active Suggestions" value={reorderSuggestions.length} />
-      </div>
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-950">Operational metrics</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            A compact view of current risk, suggested action, and data freshness based on the
+            insight rules already used throughout PharmaFlow.
+          </p>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <SummaryCard label="Forecast Runout Soon" value={stockRunOutSoonCount} />
-        <SummaryCard label="Forecast Running Low" value={stockRunningLowCount} />
-        <SummaryCard label="Forecast Rows" value={forecastRows.length} />
-      </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryCard
+            label="At-Risk Inventory Value"
+            value={formatCurrency(atRiskInventoryValue)}
+            helperText="Estimated using purchase price where available for near-expiry or slow-moving stock."
+          />
+          <SummaryCard
+            label="Medicines At Stockout Risk"
+            value={stockRunOutSoonCount}
+            helperText="Medicines currently flagged as likely to run out soon from existing stock-cover logic."
+          />
+          <SummaryCard
+            label="Reorder Recommendations"
+            value={reorderRecommendationCount}
+            helperText="Medicines with a positive rules-based reorder quantity."
+          />
+          <SummaryCard
+            label="Items Needing Attention"
+            value={actionableInsightCount}
+            helperText="Open workflow items across stockout, expiry, and reorder views."
+          />
+          <SummaryCard
+            label="Inventory Last Updated"
+            value={formatDateTime(latestInventoryImportAt)}
+            helperText="Latest CSV import refresh recorded for your inventory batches."
+          />
+        </div>
+      </section>
 
       <InsightSection
-        title="Demand forecast"
-        description="Simple demand forecasting from the last 30 days of sales, with stock coverage labels to guide replenishment decisions."
-        emptyText="No forecast rows are available yet."
+        title="Needs attention"
+        description="Top priority items are sorted by urgency so your team can move through the most important stockout, expiry, and reorder issues first."
+        emptyText="No priority items are currently available."
       >
-        {forecastRows.length ? (
+        {priorityItems.length ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SummaryCard label="Open Items" value={workflowCounts.open} />
+              <SummaryCard label="Reviewed Items" value={workflowCounts.reviewed} />
+              <SummaryCard label="Needs Reorder" value={workflowCounts.needs_reorder} />
+              <SummaryCard label="Monitor Items" value={workflowCounts.monitor} />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <FilterLink
+                label="All items"
+                href={buildWorkflowInsightsHref({
+                  severity: severityFilter === "all" ? null : severityFilter,
+                  noSalesOnly,
+                  workflow: "all",
+                })}
+                active={workflowFilter === "all"}
+              />
+              <FilterLink
+                label="Open"
+                href={buildWorkflowInsightsHref({
+                  severity: severityFilter === "all" ? null : severityFilter,
+                  noSalesOnly,
+                  workflow: "open",
+                })}
+                active={workflowFilter === "open"}
+              />
+              <FilterLink
+                label="Reviewed"
+                href={buildWorkflowInsightsHref({
+                  severity: severityFilter === "all" ? null : severityFilter,
+                  noSalesOnly,
+                  workflow: "reviewed",
+                })}
+                active={workflowFilter === "reviewed"}
+              />
+              <FilterLink
+                label="Needs reorder"
+                href={buildWorkflowInsightsHref({
+                  severity: severityFilter === "all" ? null : severityFilter,
+                  noSalesOnly,
+                  workflow: "needs_reorder",
+                })}
+                active={workflowFilter === "needs_reorder"}
+              />
+              <FilterLink
+                label="Monitor"
+                href={buildWorkflowInsightsHref({
+                  severity: severityFilter === "all" ? null : severityFilter,
+                  noSalesOnly,
+                  workflow: "monitor",
+                })}
+                active={workflowFilter === "monitor"}
+              />
+            </div>
+
+            {filteredPriorityItems.length ? (
+              <div className="space-y-3">
+                {filteredPriorityItems.map((item) => (
+                  <div
+                    key={item.key}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getSeverityClasses(
+                              item.severity,
+                            )}`}
+                          >
+                            {item.severity}
+                          </span>
+                          <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                            {item.issueTypeLabel}
+                          </span>
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getWorkflowStatusClasses(
+                              item.workflowStatus,
+                            )}`}
+                          >
+                            {getInsightWorkflowStatusLabel(item.workflowStatus)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <p className="text-base font-semibold text-slate-950">{item.medicineName}</p>
+                          <p className="mt-1 text-sm font-medium text-slate-700">{item.urgencyLabel}</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">{item.reason}</p>
+                        </div>
+                      </div>
+
+                      <div className="w-full lg:w-auto">
+                        <InsightWorkflowForm
+                          insightKey={item.key}
+                          insightType={item.insightType}
+                          initialStatus={item.workflowStatus}
+                          medicineId={item.medicineId}
+                          inventoryBatchId={item.inventoryBatchId}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                No priority items match the current workflow filter.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </InsightSection>
+
+      <InsightSection
+        title="Stockout risk"
+        description="Medicines most likely to run short soon, sorted by the lowest remaining days of cover."
+        emptyText="No stockout risk items are currently flagged."
+      >
+        {stockoutRiskRows.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
               <thead>
                 <tr className="text-slate-500">
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Daily Sales Avg</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 7-Day Demand</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 30-Day Demand</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Avg Daily Sales</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Forecast Status</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {forecastRows.map((row) => (
+                {stockoutRiskRows.map((row) => (
                   <tr key={row.id}>
                     <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
                       {row.medicineName}
@@ -838,12 +1200,6 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                       {formatDecimal(row.dailySalesAverage)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDecimal(row.predictedDemand7Days)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDecimal(row.predictedDemand30Days)}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                       {formatDaysOfStockLeft(row.daysOfStockLeft)}
@@ -857,44 +1213,8 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                         {row.coverageLabel}
                       </span>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </InsightSection>
-
-      <InsightSection
-        title="Fast-moving medicines"
-        description="Top-selling medicines by total quantity sold in the last 30 days."
-        emptyText="No recent sales data is available yet for fast-moving insights."
-      >
-        {fastMoving.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-              <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity Sold (30d)</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fastMoving.map((row) => (
-                  <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                      {row.medicineName}
-                    </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.recentSales}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
-                      <ReorderButton
-                        medicineId={row.id}
-                        reason={`High demand: strong sales in last 30 days (${row.recentSales} units)`}
-                        existingPending={pendingReorderMedicineIds.has(row.id)}
-                      />
+                      {`Stock will run out in ${formatDaysOfStockLeft(row.daysOfStockLeft)}.`}
                     </td>
                   </tr>
                 ))}
@@ -905,46 +1225,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       </InsightSection>
 
       <InsightSection
-        title="Slow-moving medicines"
-        description="Medicines with stock on hand but very low sales in the last 30 days."
-        emptyText="No slow-moving medicines detected right now."
+        title="Near expiry"
+        description="Batches with the shortest expiry horizon, including expired stock and batches that should be moved first."
+        emptyText="No near-expiry items are currently flagged."
       >
-        {slowMoving.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-              <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity Sold (30d)</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {slowMoving.map((row) => (
-                  <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                      {row.medicineName}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.recentSales}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.currentStock}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </InsightSection>
-
-      <InsightSection
-        title="Batch intelligence"
-        description="Expiry-focused batch guidance to help your team sell the right batch first and spot urgent stock quickly."
-        emptyText="No active batches are available for batch intelligence yet."
-      >
-        {batchIntelligenceRows.length ? (
+        {nearExpiryRows.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
               <thead>
@@ -953,12 +1238,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Batch</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Expiry Date</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {batchIntelligenceRows.map((row) => (
+                {nearExpiryRows.map((row) => (
                   <tr key={row.id}>
                     <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
                       {row.medicineName}
@@ -980,7 +1265,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       </span>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.recommendation}
+                      {row.daysUntilExpiry < 0
+                        ? `Expired with ${row.quantity} units still in stock.`
+                        : `Expires in ${row.daysUntilExpiry} day${row.daysUntilExpiry === 1 ? "" : "s"} with ${row.quantity} units remaining.`}
                     </td>
                   </tr>
                 ))}
@@ -991,111 +1278,28 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       </InsightSection>
 
       <InsightSection
-        title="Dead stock risk"
-        description="Medicines with stock remaining and weak movement in the last 30 days, now grouped with clearer severity signals."
-        emptyText="No dead stock risk is currently flagged."
-      >
-        {deadStockRisk.length ? (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <FilterLink
-                label="All severities"
-                href={buildInsightsHref(null, noSalesOnly)}
-                active={severityFilter === "all"}
-              />
-              <FilterLink
-                label="High"
-                href={buildInsightsHref("high", noSalesOnly)}
-                active={severityFilter === "high"}
-              />
-              <FilterLink
-                label="Medium"
-                href={buildInsightsHref("medium", noSalesOnly)}
-                active={severityFilter === "medium"}
-              />
-              <FilterLink
-                label="Low"
-                href={buildInsightsHref("low", noSalesOnly)}
-                active={severityFilter === "low"}
-              />
-              <FilterLink
-                label="No-sales only"
-                href={buildInsightsHref(
-                  severityFilter === "all" ? null : severityFilter,
-                  !noSalesOnly,
-                )}
-                active={noSalesOnly}
-              />
-            </div>
-
-            {filteredDeadStockRisk.length ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-                  <thead>
-                    <tr className="text-slate-500">
-                      <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                      <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                      <th className="border-b border-slate-200 px-3 py-3 font-medium">Recent Sales (30d)</th>
-                      <th className="border-b border-slate-200 px-3 py-3 font-medium">Severity</th>
-                      <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDeadStockRisk.map((row) => (
-                      <tr key={row.id}>
-                        <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                          {row.medicineName}
-                        </td>
-                        <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                          {row.currentStock}
-                        </td>
-                        <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                          {row.recentSales}
-                        </td>
-                        <td className="border-b border-slate-100 px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getDeadStockSeverityClasses(row.severity)}`}
-                          >
-                            {row.severity}
-                          </span>
-                        </td>
-                        <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                          {row.recommendation}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-                No medicines match the current dead stock filters.
-              </div>
-            )}
-          </div>
-        ) : null}
-      </InsightSection>
-
-      <InsightSection
         title="Reorder suggestions"
-        description="Smarter reorder guidance using stock cover, sales velocity, and dead stock signals from the last 30 days."
+        description="Rules-based reorder guidance using current stock and the last 30 days of sales activity."
         emptyText="No reorder suggestions are needed right now."
       >
         {reorderSuggestions.length ? (
-          <div className="overflow-x-auto">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+              {REORDER_TRANSPARENCY_COPY} Matching rows use a simple stock-cover rule. If there are
+              no sales in the last 30 days, PharmaFlow shows “Not enough recent sales data” instead
+              of a precise reorder quantity.
+            </div>
+
+            <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
               <thead>
                 <tr className="text-slate-500">
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Recent Sales (30d)</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Daily Sales Velocity</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 7-Day Demand</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Predicted 30-Day Demand</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Suggested Quantity</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommended Reorder</th>
+                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
                   <th className="border-b border-slate-200 px-3 py-3 font-medium">Action</th>
                 </tr>
               </thead>
@@ -1106,25 +1310,20 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       <div className="space-y-1">
                         <p>{row.medicineName}</p>
                         <p className="text-xs text-slate-500">{row.reason}</p>
+                        <p className="text-xs text-slate-500">{row.confidenceNote}</p>
                       </div>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.currentStock}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.recentSales}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDecimal(row.dailySalesVelocity)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDecimal(row.predictedDemand7Days)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDecimal(row.predictedDemand30Days)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
                       {formatDaysOfStockLeft(row.daysOfStockLeft)}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3">
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getReorderStatusClasses(
+                          row.status,
+                        )}`}
+                      >
+                        {row.status}
+                      </span>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3">
                       <span
@@ -1134,17 +1333,13 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       </span>
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.suggestedQuantity > 0 ? row.suggestedQuantity : "—"}
+                      {row.recommendedReorderQuantity === null ? "—" : row.recommendedReorderQuantity}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      {row.reason}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getPriorityClasses(row.priority)}`}
-                      >
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
-                      {row.recommendation === "Avoid Reorder" ? (
+                      {!row.actionable ? (
                         <span className="text-xs font-medium text-slate-500">No action recommended</span>
                       ) : (
                         <ReorderButton
@@ -1158,6 +1353,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                 ))}
               </tbody>
             </table>
+          </div>
           </div>
         ) : null}
       </InsightSection>

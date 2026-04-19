@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { SectionIntro } from "@/components/layout/section-intro";
+import { ExportButton } from "@/components/reports/export-button";
 import { SetupNotice } from "@/components/layout/setup-notice";
 import { CreatePoFromReorderForm } from "@/components/purchase-orders/create-po-from-reorder-form";
 import { ReorderStatusForm } from "@/components/reorders/reorder-status-form";
@@ -11,6 +12,10 @@ import {
   type ProductForecastRecord,
   type ProductForecastRow,
 } from "@/lib/forecasting/product";
+import {
+  REORDER_TRANSPARENCY_COPY,
+  getRulesBasedReorderDecision,
+} from "@/services/inventory";
 import { isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -116,61 +121,24 @@ function getSmartOrderingSuggestion({
   currentStock: number;
   recentSales: number;
 }) {
-  const dailySalesVelocity = recentSales > 0 ? recentSales / 30 : 0;
-  const daysOfStockLeft =
-    dailySalesVelocity > 0 ? currentStock / dailySalesVelocity : null;
-
-  if (recentSales <= 0) {
-    return {
-      daysOfStockLeft,
-      recommendation: "Avoid Reorder" as const,
-      priority: "Low" as const,
-      suggestedQuantity: 0,
-      explainabilityNote: "No forecast available or confidence is low, so the existing rule-based logic is being used.",
-      confidenceNote: "Fallback mode due to limited forecast confidence or missing forecast data.",
-    };
-  }
-
-  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
-    return {
-      daysOfStockLeft,
-      recommendation: "Reorder Now" as const,
-      priority: "Urgent" as const,
-      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 30)),
-      explainabilityNote: "Fallback to existing rule-based reorder logic because forecast support is unavailable for this medicine.",
-      confidenceNote: "Using the current operational heuristic from recent sales and stock coverage.",
-    };
-  }
-
-  if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
-    return {
-      daysOfStockLeft,
-      recommendation: "Reorder Soon" as const,
-      priority: "High" as const,
-      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 21)),
-      explainabilityNote: "Fallback to existing rule-based reorder logic because forecast support is unavailable for this medicine.",
-      confidenceNote: "Using the current operational heuristic from recent sales and stock coverage.",
-    };
-  }
-
-  if (currentStock < 20) {
-    return {
-      daysOfStockLeft,
-      recommendation: "Monitor" as const,
-      priority: "Medium" as const,
-      suggestedQuantity: Math.max(1, Math.ceil(dailySalesVelocity * 15)),
-      explainabilityNote: "Fallback to existing rule-based reorder logic because forecast support is unavailable for this medicine.",
-      confidenceNote: "Using the current operational heuristic from recent sales and stock coverage.",
-    };
-  }
+  const decision = getRulesBasedReorderDecision({
+    currentStock,
+    recentSales30d: recentSales,
+  });
 
   return {
-    daysOfStockLeft,
-    recommendation: "Avoid Reorder" as const,
-    priority: "Low" as const,
-    suggestedQuantity: 0,
-    explainabilityNote: "Fallback to existing rule-based reorder logic because forecast support is unavailable for this medicine.",
-    confidenceNote: "Using the current operational heuristic from recent sales and stock coverage.",
+    daysOfStockLeft: decision.daysOfStockLeft,
+    recommendation: decision.recommendation,
+    priority: decision.priority,
+    suggestedQuantity: decision.recommendedReorderQuantity ?? 0,
+    explainabilityNote:
+      decision.availability === "available"
+        ? "No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula."
+        : "No forecast available or confidence is low, and there is not enough recent sales data to calculate a reliable fallback reorder quantity.",
+    confidenceNote:
+      decision.availability === "available"
+        ? REORDER_TRANSPARENCY_COPY
+        : decision.confidenceNote,
   };
 }
 
@@ -488,6 +456,9 @@ export default async function ReordersPage() {
         title="Reorders"
         description="Forecast-aware reorder workflow for medicines that need attention, with supplier selection and lightweight purchasing follow-through."
       />
+      <div className="flex flex-wrap gap-3">
+        <ExportButton href="/api/exports/reorders" label="Export Reorder Report" />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -521,7 +492,7 @@ export default async function ReordersPage() {
             <h3 className="text-lg font-semibold text-slate-950">Reorder list</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Forecast-backed recommendations appear first. Lower-confidence cases fall back to the
-              existing rule-based logic so the workflow remains safe and understandable.
+              rules-based reorder formula so the workflow remains safe and understandable.
             </p>
           </div>
 

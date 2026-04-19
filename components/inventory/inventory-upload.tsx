@@ -7,15 +7,26 @@ import type { InventoryImportState } from "@/app/(app)/inventory/actions";
 import { importInventoryCsv } from "@/app/(app)/inventory/actions";
 import {
   normalizeInventoryCsvHeader,
+  optionalInventoryColumns,
   requiredInventoryColumns,
+  supportedInventoryColumns,
   validateInventoryCsvRows,
   type InventoryPreviewRow,
   type InventoryImportRow,
-} from "@/lib/inventory/csv";
+} from "@/services/inventory";
 
 const initialImportState: InventoryImportState = {
   error: null,
   success: null,
+  totalParsedRows: 0,
+  skippedEmptyRows: 0,
+  validRowsCount: 0,
+  invalidRowsCount: 0,
+  importedRowsCount: 0,
+  newMedicinesCreated: 0,
+  medicinesReused: 0,
+  newBatchesCreated: 0,
+  existingBatchesUpdated: 0,
 };
 
 function ImportSubmitButton({
@@ -39,12 +50,17 @@ function ImportSubmitButton({
 function PreviewStatus({ row }: { row: InventoryPreviewRow }) {
   if (row.errors.length) {
     return (
-      <div className="space-y-1">
-        {row.errors.map((error) => (
-          <p key={error} className="text-sm text-red-600">
-            {error}
-          </p>
-        ))}
+      <div className="space-y-2">
+        <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+          Invalid
+        </span>
+        <div className="space-y-1">
+          {row.errors.map((error) => (
+            <p key={error} className="text-sm text-red-600">
+              {error}
+            </p>
+          ))}
+        </div>
       </div>
     );
   }
@@ -53,6 +69,21 @@ function PreviewStatus({ row }: { row: InventoryPreviewRow }) {
     <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
       Valid
     </span>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-xl font-semibold text-slate-900">{value}</p>
+    </div>
   );
 }
 
@@ -127,8 +158,26 @@ export function InventoryUpload() {
     () => previewRows.filter((row) => row.errors.length > 0),
     [previewRows],
   );
-  const canImport =
-    validRows.length > 0 && missingColumns.length === 0 && invalidRows.length === 0 && !parseError;
+  const canImport = validRows.length > 0 && missingColumns.length === 0 && !parseError;
+  const totalParsedRows = previewRows.length + skippedEmptyRows;
+  const rejectedRowsCount = invalidRows.length;
+
+  function handleDownloadTemplate() {
+    const templateRows = [
+      supportedInventoryColumns.join(","),
+      "Paracetamol 650,BATCH-001,120,2027-12-31,1.5,2.2,PCM650,TABLET,strip",
+      "Amoxicillin 500,BATCH-002,48,2026-10-15,4.8,6.5,AMX500,CAPSULE,box",
+    ];
+    const blob = new Blob([templateRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = "pharmaflow-inventory-template.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+  }
 
   return (
     <section className="space-y-6">
@@ -137,23 +186,63 @@ export function InventoryUpload() {
           <div className="max-w-2xl">
             <h3 className="text-lg font-semibold text-slate-950">Inventory CSV upload</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Upload batch-based inventory data, validate it before import, and keep the workflow reliable even on smaller screens.
+              Upload batch-based inventory data, validate it before import, and keep repeated CSV refreshes predictable for your team.
             </p>
-            <p className="mt-3 text-sm text-slate-500">
-              Required columns: <code>medicine_name</code>, <code>batch_number</code>,{" "}
-              <code>quantity</code>, <code>expiry_date</code>
-            </p>
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Required columns
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  <code>medicine_name</code>, <code>batch_number</code>, <code>quantity</code>,{" "}
+                  <code>expiry_date</code>
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Optional columns
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {optionalInventoryColumns.map((column, index) => (
+                    <span key={column}>
+                      <code>{column}</code>
+                      {index < optionalInventoryColumns.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+              Use a comma-separated file with one header row. Dates work best in <code>YYYY-MM-DD</code>{" "}
+              format. Common header variations like <code>qty</code>, <code>expiry</code>, and{" "}
+              <code>batch no</code> are accepted automatically when they clearly map to the expected columns.
+            </div>
+            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+              Matching batches are updated using snapshot logic. If a row matches the same medicine
+              and batch number, PharmaFlow replaces the stored quantity and batch details with the
+              uploaded values. Quantity is replaced, not added, and batches missing from the file
+              are not deleted.
+            </div>
           </div>
 
-          <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:w-auto">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            Select CSV file
-          </label>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Download sample CSV
+            </button>
+            <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:w-auto">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              Select CSV file
+            </label>
+          </div>
         </div>
 
         <div className="mt-5 space-y-3">
@@ -192,25 +281,36 @@ export function InventoryUpload() {
               {importState.success}
             </p>
           ) : null}
+
+          {(importState.success || importState.error) && importState.totalParsedRows > 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-900">Last import result</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+                <SummaryStat label="Rows parsed" value={importState.totalParsedRows} />
+                <SummaryStat label="Rows imported" value={importState.importedRowsCount} />
+                <SummaryStat label="Rows rejected" value={importState.invalidRowsCount} />
+                <SummaryStat label="Skipped empty" value={importState.skippedEmptyRows} />
+                <SummaryStat label="New batches created" value={importState.newBatchesCreated} />
+                <SummaryStat label="Batches updated" value={importState.existingBatchesUpdated} />
+                <SummaryStat label="New medicines created" value={importState.newMedicinesCreated} />
+                <SummaryStat label="Medicines reused" value={importState.medicinesReused} />
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Preview rows</p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{previewRows.length}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Valid rows</p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{validRows.length}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Skipped empty</p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{skippedEmptyRows}</p>
-          </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
+          <SummaryStat label="Preview rows" value={previewRows.length} />
+          <SummaryStat label="Valid rows" value={validRows.length} />
+          <SummaryStat label="Invalid rows" value={rejectedRowsCount} />
+          <SummaryStat label="Skipped empty" value={skippedEmptyRows} />
         </div>
 
         <form action={importAction} className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <input type="hidden" name="rowsJson" value={JSON.stringify(validRows)} />
+          <input type="hidden" name="totalParsedRows" value={String(totalParsedRows)} />
+          <input type="hidden" name="skippedEmptyRows" value={String(skippedEmptyRows)} />
+          <input type="hidden" name="invalidRowsCount" value={String(invalidRows.length)} />
           <ImportSubmitButton
             disabled={!canImport || isPending}
             label={isPending ? "Importing..." : "Import inventory"}
@@ -218,11 +318,18 @@ export function InventoryUpload() {
           {!fileName ? (
             <span className="text-sm text-slate-500">Choose a CSV file to begin.</span>
           ) : !canImport ? (
-            <span className="text-sm text-slate-500">Fix validation issues before importing.</span>
+            <span className="text-sm text-slate-500">
+              No valid rows available. Fix validation issues before importing.
+            </span>
+          ) : rejectedRowsCount > 0 ? (
+            <span className="text-sm text-slate-500">
+              {validRows.length} valid row{validRows.length === 1 ? "" : "s"} will import using snapshot updates.{" "}
+              {rejectedRowsCount} invalid row{rejectedRowsCount === 1 ? "" : "s"} will be rejected.
+            </span>
           ) : (
             <span className="text-sm text-slate-500">
               Ready to import {validRows.length} validated row
-              {validRows.length === 1 ? "" : "s"}.
+              {validRows.length === 1 ? "" : "s"} using snapshot updates for matching batches.
             </span>
           )}
         </form>
@@ -237,7 +344,7 @@ export function InventoryUpload() {
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Expected columns: {requiredInventoryColumns.join(", ")}
+            Expected columns: {supportedInventoryColumns.join(", ")}
           </div>
         </div>
 

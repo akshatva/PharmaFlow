@@ -14,10 +14,13 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
   const router = useRouter();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const processingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const lastDecodedRef = useRef("");
   const [manualCode, setManualCode] = useState(initialCode);
   const [isStarting, setIsStarting] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>("Point camera at QR code or barcode.");
+  const [selectedCameraLabel, setSelectedCameraLabel] = useState<string | null>(null);
 
   const hasCode = useMemo(() => Boolean(manualCode.trim()), [manualCode]);
 
@@ -26,7 +29,10 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
   }, [initialCode]);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
+      mountedRef.current = false;
       void stopScanner();
     };
   }, []);
@@ -45,7 +51,50 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
     } catch {}
 
     scannerRef.current = null;
-    setIsScanning(false);
+    processingRef.current = false;
+
+    if (mountedRef.current) {
+      setIsScanning(false);
+      setSelectedCameraLabel(null);
+    }
+  }
+
+  function getScannerErrorMessage(error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "Scanner could not be started.";
+    const normalizedMessage = message.toLowerCase();
+
+    if (
+      normalizedMessage.includes("permission") ||
+      normalizedMessage.includes("notallowederror") ||
+      normalizedMessage.includes("denied")
+    ) {
+      return "Camera permission was denied. Allow camera access and try again.";
+    }
+
+    if (
+      normalizedMessage.includes("camera not found") ||
+      normalizedMessage.includes("no camera") ||
+      normalizedMessage.includes("notfounderror")
+    ) {
+      return "No camera is available on this device.";
+    }
+
+    return `Scanner failed to start. ${message}`;
+  }
+
+  function pickPreferredCameraId(
+    cameras: Array<{
+      id: string;
+      label: string;
+    }>,
+  ) {
+    const preferredCamera =
+      cameras.find((camera) =>
+        /back|rear|environment|world/i.test(camera.label),
+      ) ?? cameras[cameras.length - 1];
+
+    return preferredCamera ?? null;
   }
 
   async function startScanner() {
@@ -53,14 +102,18 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
       return;
     }
 
-    setFeedback(null);
+    console.debug("[pharmaflow-scan] scanner start requested");
+    setFeedback("Starting camera...");
     setIsStarting(true);
 
     try {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      const cameras = await Html5Qrcode.getCameras();
+      const preferredCamera = pickPreferredCameraId(cameras);
 
       const scanner = new Html5Qrcode(scannerElementId, {
         formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.CODE_93,
@@ -73,37 +126,83 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
       });
 
       scannerRef.current = scanner;
+      console.debug("[pharmaflow-scan] selected camera", {
+        cameraId: preferredCamera?.id ?? null,
+        cameraLabel: preferredCamera?.label ?? null,
+        availableCameras: cameras.map((camera) => ({
+          id: camera.id,
+          label: camera.label,
+        })),
+      });
 
       await scanner.start(
-        { facingMode: "environment" },
+        preferredCamera?.id
+          ? preferredCamera.id
+          : { facingMode: { ideal: "environment" } },
         {
           fps: 10,
-          qrbox: { width: 280, height: 160 },
-          aspectRatio: 1.7777778,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const boxWidth = Math.min(viewfinderWidth - 32, 300);
+            const boxHeight = Math.min(viewfinderHeight - 32, 300);
+
+            return {
+              width: Math.max(220, boxWidth),
+              height: Math.max(220, boxHeight),
+            };
+          },
+          aspectRatio: 1,
         },
         async (decodedText) => {
-          if (processingRef.current) {
+          console.debug("[pharmaflow-scan] scan callback fired", {
+            decodedText,
+          });
+
+          const normalizedText = decodedText.trim();
+
+          if (
+            processingRef.current ||
+            !normalizedText ||
+            normalizedText === lastDecodedRef.current
+          ) {
             return;
           }
 
           processingRef.current = true;
-          setManualCode(decodedText);
-          setFeedback(`Detected barcode: ${decodedText}`);
+          lastDecodedRef.current = normalizedText;
+          console.debug("[pharmaflow-scan] decoded result received", {
+            decodedText: normalizedText,
+          });
+
+          if (mountedRef.current) {
+            setManualCode(normalizedText);
+            setFeedback(`Detected code: ${normalizedText}`);
+          }
+
           await stopScanner();
-          router.push(`/scan?code=${encodeURIComponent(decodedText)}`);
-          processingRef.current = false;
+          router.push(`/scan?code=${encodeURIComponent(normalizedText)}`);
         },
         () => {},
       );
 
-      setIsScanning(true);
+      if (mountedRef.current) {
+        setIsScanning(true);
+        setSelectedCameraLabel(preferredCamera?.label ?? "Default camera");
+        setFeedback("Point camera at QR code or barcode.");
+      }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Camera access could not be started.";
-      setFeedback(message);
+      console.debug("[pharmaflow-scan] scanner init failure", {
+        error,
+      });
+
+      if (mountedRef.current) {
+        setFeedback(getScannerErrorMessage(error));
+      }
+
       await stopScanner();
     } finally {
-      setIsStarting(false);
+      if (mountedRef.current) {
+        setIsStarting(false);
+      }
     }
   }
 
@@ -127,7 +226,7 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
         <div className="max-w-2xl">
           <h3 className="text-lg font-semibold text-slate-950">Camera scanner</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Open the device camera, scan a medicine barcode, and jump straight into stock actions.
+            Open the device camera, point it at a QR code or barcode, and jump straight into stock actions.
           </p>
         </div>
 
@@ -159,10 +258,19 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
         </p>
       ) : null}
 
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+          {isStarting ? "Initializing camera" : isScanning ? "Scanner active" : "Scanner idle"}
+        </span>
+        <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+          {selectedCameraLabel ? `Camera: ${selectedCameraLabel}` : "Rear camera preferred on mobile"}
+        </span>
+      </div>
+
       <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-slate-950">
         <div
           id={scannerElementId}
-          className="min-h-[260px] w-full bg-slate-950 [&>video]:h-[260px] [&>video]:w-full [&>video]:object-cover"
+          className="min-h-[320px] w-full bg-slate-950 [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover"
         />
       </div>
 

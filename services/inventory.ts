@@ -1,3 +1,8 @@
+import type {
+  ForecastPriority,
+  ForecastRecommendation,
+} from "@/lib/forecasting/product";
+
 export const requiredInventoryColumns = [
   "medicine_name",
   "batch_number",
@@ -13,12 +18,13 @@ export const optionalInventoryColumns = [
   "unit",
 ] as const;
 
-const supportedInventoryColumns = [
+export const supportedInventoryColumns = [
   ...requiredInventoryColumns,
   ...optionalInventoryColumns,
 ] as const;
 
 type SupportedInventoryColumn = (typeof supportedInventoryColumns)[number];
+type RawCsvRow = Record<string, unknown>;
 
 export type InventoryImportRow = {
   medicine_name: string;
@@ -45,26 +51,82 @@ export type InventoryCsvValidationResult = {
   skippedEmptyRows: number;
 };
 
-type RawCsvRow = Record<string, unknown>;
+export const REORDER_SALES_WINDOW_DAYS = 30;
+export const REORDER_TARGET_DAYS_COVER = 14;
+export const REORDER_SAFETY_BUFFER_UNITS = 5;
+
+export const REORDER_TRANSPARENCY_COPY =
+  "Based on last 30 days sales, 14 days target cover, and a 5-unit safety buffer.";
+
+export type RulesBasedReorderDecision = {
+  averageDailySales30d: number | null;
+  daysOfStockLeft: number | null;
+  recommendation: ForecastRecommendation;
+  priority: ForecastPriority;
+  recommendedReorderQuantity: number | null;
+  availability: "available" | "insufficient_recent_sales_data";
+  explainabilityNote: string;
+  confidenceNote: string;
+};
+
+export function normalizeMedicineDisplayName(value: string) {
+  return value.trim().replace(/\s*-\s*/g, "-").replace(/\s+/g, " ");
+}
+
+export function normalizeMedicineComparableName(value: string) {
+  return normalizeMedicineDisplayName(value).toLowerCase();
+}
 
 function trimCell(value: unknown) {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
-}
-
-function normalizeHeader(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function toNullableText(value: string) {
   return value ? value : null;
 }
 
-function normalizeDate(value: string) {
+function normalizeHeader(value: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  const aliases: Record<string, SupportedInventoryColumn> = {
+    medicine: "medicine_name",
+    medicine_name: "medicine_name",
+    medicine_title: "medicine_name",
+    item_name: "medicine_name",
+    drug_name: "medicine_name",
+    batch: "batch_number",
+    batch_no: "batch_number",
+    batch_number: "batch_number",
+    lot_number: "batch_number",
+    lot_no: "batch_number",
+    qty: "quantity",
+    quantity: "quantity",
+    expiry: "expiry_date",
+    expiry_date: "expiry_date",
+    expiration_date: "expiry_date",
+    exp_date: "expiry_date",
+    purchase_cost: "purchase_price",
+    purchase_price: "purchase_price",
+    cost_price: "purchase_price",
+    selling_price: "selling_price",
+    sale_price: "selling_price",
+    mrp: "selling_price",
+    item_sku: "sku",
+    sku: "sku",
+  };
+
+  return aliases[normalized] ?? normalized;
+}
+
+export function normalizeInventoryDate(value: string) {
   if (!value) {
     return null;
   }
 
-  const parsed = new Date(value);
+  const parsed = new Date(value.trim());
 
   if (Number.isNaN(parsed.getTime())) {
     return null;
@@ -92,6 +154,10 @@ function getRowValues(row: RawCsvRow) {
   );
 }
 
+export function normalizeInventoryCsvHeader(header: string) {
+  return normalizeHeader(header);
+}
+
 export function validateInventoryCsvRows(
   rows: RawCsvRow[],
   headers: string[],
@@ -100,25 +166,21 @@ export function validateInventoryCsvRows(
   const missingColumns = requiredInventoryColumns.filter(
     (column) => !normalizedHeaders.includes(column),
   );
-
   const previewRows: InventoryPreviewRow[] = [];
   const validRows: InventoryImportRow[] = [];
   let skippedEmptyRows = 0;
 
   rows.forEach((row, index) => {
     const values = getRowValues(row);
-    const hasAnyValue = Object.values(values).some(Boolean);
 
-    if (!hasAnyValue) {
+    if (!Object.values(values).some(Boolean)) {
       skippedEmptyRows += 1;
       return;
     }
 
     const errors: string[] = [];
-    const quantityValue = values.quantity;
-    const expiryDateValue = values.expiry_date;
-    const normalizedQuantity = Number(quantityValue);
-    const normalizedExpiryDate = normalizeDate(expiryDateValue);
+    const normalizedQuantity = Number(values.quantity);
+    const normalizedExpiryDate = normalizeInventoryDate(values.expiry_date);
     const normalizedPurchasePrice = normalizeNumeric(values.purchase_price);
     const normalizedSellingPrice = normalizeNumeric(values.selling_price);
 
@@ -130,13 +192,13 @@ export function validateInventoryCsvRows(
       errors.push("Batch number is required.");
     }
 
-    if (!quantityValue) {
+    if (!values.quantity) {
       errors.push("Quantity is required.");
     } else if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 0) {
       errors.push("Quantity must be a non-negative whole number.");
     }
 
-    if (!expiryDateValue) {
+    if (!values.expiry_date) {
       errors.push("Expiry date is required.");
     } else if (!normalizedExpiryDate) {
       errors.push("Expiry date must be a valid date.");
@@ -150,17 +212,15 @@ export function validateInventoryCsvRows(
       errors.push("Selling price must be a valid number.");
     }
 
-    const previewRow: InventoryPreviewRow = {
+    previewRows.push({
       rowNumber: index + 2,
       values,
       errors,
-    };
-
-    previewRows.push(previewRow);
+    });
 
     if (!errors.length && !missingColumns.length) {
       validRows.push({
-        medicine_name: values.medicine_name,
+        medicine_name: normalizeMedicineDisplayName(values.medicine_name),
         batch_number: values.batch_number,
         quantity: normalizedQuantity,
         expiry_date: normalizedExpiryDate!,
@@ -179,10 +239,6 @@ export function validateInventoryCsvRows(
     validRows,
     skippedEmptyRows,
   };
-}
-
-export function normalizeInventoryCsvHeader(header: string) {
-  return normalizeHeader(header);
 }
 
 export function validateInventoryImportRows(input: unknown) {
@@ -224,7 +280,7 @@ export function validateInventoryImportRows(input: unknown) {
     if (
       typeof candidate.expiry_date !== "string" ||
       !candidate.expiry_date ||
-      !normalizeDate(candidate.expiry_date)
+      !normalizeInventoryDate(candidate.expiry_date)
     ) {
       rowErrors.push("expiry_date must be a valid date");
     }
@@ -251,10 +307,10 @@ export function validateInventoryImportRows(input: unknown) {
     }
 
     validRows.push({
-      medicine_name: candidate.medicine_name!.trim(),
+      medicine_name: normalizeMedicineDisplayName(candidate.medicine_name!),
       batch_number: candidate.batch_number!.trim(),
       quantity: candidate.quantity!,
-      expiry_date: normalizeDate(candidate.expiry_date!)!,
+      expiry_date: normalizeInventoryDate(candidate.expiry_date!)!,
       purchase_price: candidate.purchase_price ?? null,
       selling_price: candidate.selling_price ?? null,
       sku: toNullableText(String(candidate.sku ?? "").trim()),
@@ -266,5 +322,83 @@ export function validateInventoryImportRows(input: unknown) {
   return {
     errors,
     validRows,
+  };
+}
+
+function roundValue(value: number) {
+  return Number(value.toFixed(2));
+}
+
+export function getRulesBasedReorderDecision({
+  currentStock,
+  recentSales30d,
+}: {
+  currentStock: number;
+  recentSales30d: number;
+}): RulesBasedReorderDecision {
+  if (recentSales30d <= 0) {
+    return {
+      averageDailySales30d: null,
+      daysOfStockLeft: null,
+      recommendation: "Avoid Reorder",
+      priority: "Low",
+      recommendedReorderQuantity: null,
+      availability: "insufficient_recent_sales_data",
+      explainabilityNote: "Not enough recent sales data to calculate a reliable reorder quantity.",
+      confidenceNote:
+        "No sales were recorded in the last 30 days, so PharmaFlow is not showing a precise reorder number.",
+    };
+  }
+
+  const averageDailySales30d = recentSales30d / REORDER_SALES_WINDOW_DAYS;
+  const daysOfStockLeft =
+    averageDailySales30d > 0 ? roundValue(currentStock / averageDailySales30d) : null;
+  const recommendedReorderQuantity = Math.max(
+    0,
+    Math.ceil(
+      averageDailySales30d * REORDER_TARGET_DAYS_COVER +
+        REORDER_SAFETY_BUFFER_UNITS -
+        currentStock,
+    ),
+  );
+
+  if (recommendedReorderQuantity === 0) {
+    return {
+      averageDailySales30d: roundValue(averageDailySales30d),
+      daysOfStockLeft,
+      recommendation: "Monitor",
+      priority: "Low",
+      recommendedReorderQuantity: 0,
+      availability: "available",
+      explainabilityNote:
+        "Current stock already covers the 14-day target window plus the 5-unit safety buffer.",
+      confidenceNote: REORDER_TRANSPARENCY_COPY,
+    };
+  }
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    return {
+      averageDailySales30d: roundValue(averageDailySales30d),
+      daysOfStockLeft,
+      recommendation: "Reorder Now",
+      priority: "Urgent",
+      recommendedReorderQuantity,
+      availability: "available",
+      explainabilityNote:
+        "Current stock is below the 14-day target window and close to running short at the recent sales pace.",
+      confidenceNote: REORDER_TRANSPARENCY_COPY,
+    };
+  }
+
+  return {
+    averageDailySales30d: roundValue(averageDailySales30d),
+    daysOfStockLeft,
+    recommendation: "Reorder Soon",
+    priority: "High",
+    recommendedReorderQuantity,
+    availability: "available",
+    explainabilityNote:
+      "Current stock is below the 14-day target window after applying the 5-unit safety buffer.",
+    confidenceNote: REORDER_TRANSPARENCY_COPY,
   };
 }

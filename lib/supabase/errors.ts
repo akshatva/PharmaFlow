@@ -27,3 +27,22 @@ export function isMissingRelationError(
 
   return error.message.includes("schema cache");
 }
+
+export function isMissingColumnError(
+  error: SupabaseLikeError | null | undefined,
+  columnName: string,
+) {
+  if (!error?.message) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("could not find the") &&
+    message.includes(columnName.toLowerCase())
+  ) || (
+    message.includes("column") &&
+    message.includes(columnName.toLowerCase()) &&
+    message.includes("does not exist")
+  );
+}

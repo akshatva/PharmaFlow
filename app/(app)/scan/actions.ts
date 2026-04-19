@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import {
+  normalizeMedicineComparableName,
+  normalizeMedicineDisplayName,
+} from "@/services/inventory";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type CreateMedicineFromScanResult = {
@@ -58,6 +62,9 @@ export async function createMedicineFromScan(
       success: null,
     };
   }
+
+  const displayName = normalizeMedicineDisplayName(name);
+  const normalizedName = normalizeMedicineComparableName(displayName);
 
   const { supabase, membership, error } = await getOrganizationContext();
 
@@ -116,7 +123,8 @@ export async function createMedicineFromScan(
 
   const { error: insertError } = await supabase.from("medicines").insert({
     organization_id: membership.organization_id,
-    name,
+    name: displayName,
+    normalized_name: normalizedName,
     sku: sku || null,
     barcode,
     category: category || null,

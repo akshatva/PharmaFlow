@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { generateForecastsForOrganization } from "@/lib/forecasting/service";
+import { isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
 
 export const runtime = "nodejs";
@@ -41,6 +42,16 @@ export async function POST() {
   });
 
   if (preparationError) {
+    if (isMissingRelationError(preparationError, "forecast_results")) {
+      return NextResponse.json(
+        {
+          error:
+            "Forecasting is not set up in Supabase yet. Apply the forecast_results migration and try again.",
+        },
+        { status: 400 },
+      );
+    }
+
     console.error("Forecast generation failed", {
       organizationId: membership.organization_id,
       code: preparationError.code,
