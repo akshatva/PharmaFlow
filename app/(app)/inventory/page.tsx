@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Clock, Download } from "lucide-react";
 
 import {
   InventoryTable,
@@ -172,16 +173,50 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
         title="Inventory"
         description="Upload and validate batch-based inventory data for your organization before importing it into PharmaFlow."
       />
-      <div className="flex flex-wrap gap-3">
-        <ExportButton href="/api/exports/inventory" label="Export Inventory CSV" />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="app-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100">
+              <Clock className="h-4 w-4 text-slate-500" />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                Inventory freshness
+              </p>
+              <p className="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">
+                {formatDateTime(latestInventoryImportAt)}
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                CSV imports use snapshot updates. Matching batches are refreshed, quantity is replaced, and missing batches stay unchanged.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="app-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100">
+              <Download className="h-4 w-4 text-slate-500" />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                Reporting
+              </p>
+              <p className="mt-1.5 text-sm font-semibold text-slate-900">
+                Export current inventory
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Download a snapshot for offline review, handoffs, and audit.
+              </p>
+              <div className="mt-3">
+                <ExportButton href="/api/exports/inventory" label="Export Inventory CSV" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">
-        Inventory last updated:{" "}
-        <span className="font-medium text-slate-900">{formatDateTime(latestInventoryImportAt)}</span>
-        <br />
-        CSV imports use snapshot updates. Matching batches are refreshed with the uploaded values,
-        quantity is replaced rather than added, and batches not present in the file stay unchanged.
-      </div>
+
       <InventoryUpload />
       <InventoryTable
         rows={inventoryRows}

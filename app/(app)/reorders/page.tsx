@@ -461,21 +461,21 @@ export default async function ReordersPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Pending</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{pendingCount}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Pending</p>
+          <p className="app-stat-value">{pendingCount}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Ordered</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{orderedCount}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Ordered</p>
+          <p className="app-stat-value">{orderedCount}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Forecast Driven</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{forecastDrivenCount}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Forecast Driven</p>
+          <p className="app-stat-value">{forecastDrivenCount}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Fallback</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{fallbackCount}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Fallback</p>
+          <p className="app-stat-value">{fallbackCount}</p>
         </div>
       </div>
 
@@ -486,11 +486,11 @@ export default async function ReordersPage() {
         />
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <section className="app-card">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
           <div>
-            <h3 className="text-lg font-semibold text-slate-950">Reorder list</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <h3 className="text-sm font-semibold text-slate-900">Reorder list</h3>
+            <p className="mt-1 text-sm text-slate-500">
               Forecast-backed recommendations appear first. Lower-confidence cases fall back to the
               rules-based reorder formula so the workflow remains safe and understandable.
             </p>
@@ -498,15 +498,17 @@ export default async function ReordersPage() {
 
           <Link
             href="/forecast"
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="app-button-secondary py-2 text-xs"
           >
             View full forecast
           </Link>
         </div>
 
         {rows.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            No reorder items yet. Create them from Alerts or Insights when something needs action.
+          <div className="p-5 sm:p-6">
+            <div className="app-empty-state">
+              No reorder items yet. Create them from Alerts or Insights when something needs action.
+            </div>
           </div>
         ) : (
           <>
@@ -524,13 +526,13 @@ export default async function ReordersPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getRiskClasses(row.stockRisk)}`}>
+                    <span className={`app-badge ${getRiskClasses(row.stockRisk)}`}>
                       {row.stockRisk}
                     </span>
-                    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
+                    <span className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
                       {row.confidenceLevel ?? "none"}
                     </span>
-                    <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                    <span className="app-badge border-slate-200 bg-white text-slate-700">
                       {row.usedForecast ? "Forecast guided" : "Fallback"}
                     </span>
                   </div>
@@ -603,8 +605,8 @@ export default async function ReordersPage() {
               ))}
             </div>
 
-            <div className="mt-6 hidden overflow-x-auto lg:block">
-              <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="app-table">
                 <thead>
                   <tr className="text-slate-500">
                     <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>

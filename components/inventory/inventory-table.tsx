@@ -122,10 +122,10 @@ function SortButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
+      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
         active
-          ? "border-slate-950 bg-slate-950 text-white"
-          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
       {label}
@@ -149,7 +149,7 @@ function Toast({
 
   return (
     <div className="fixed right-4 top-4 z-50 max-w-sm">
-      <div className={`rounded-2xl border px-4 py-3 shadow-lg ${toneClasses}`}>
+      <div className={`rounded-2xl border px-4 py-3 shadow-panel ${toneClasses}`}>
         <div className="flex items-start gap-3">
           <p className="flex-1 text-sm font-medium leading-6">{message}</p>
           <button
@@ -184,8 +184,8 @@ function ClearInventoryModal({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6">
-      <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <h3 className="text-xl font-semibold text-slate-950">Clear Inventory</h3>
+      <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h3 className="text-xl font-semibold text-slate-900">Clear Inventory</h3>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           Are you sure? This will delete all inventory batches.
         </p>
@@ -208,7 +208,7 @@ function ClearInventoryModal({
             onChange={(event) => onConfirmationTextChange(event.target.value)}
             placeholder="Type DELETE"
             disabled={isPending}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+            className="app-input"
           />
         </div>
 
@@ -217,7 +217,7 @@ function ClearInventoryModal({
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-button-secondary"
           >
             No, keep inventory
           </button>
@@ -225,7 +225,7 @@ function ClearInventoryModal({
             type="button"
             onClick={onConfirm}
             disabled={!canConfirm}
-            className="inline-flex items-center justify-center rounded-2xl border border-red-200 bg-red-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="app-button-danger"
           >
             {isPending ? "Clearing..." : "Yes, clear inventory"}
           </button>
@@ -253,7 +253,7 @@ function InventoryEditFields({
           min="0"
           required
           defaultValue={row.quantity}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+          className="app-input"
         />
       </label>
 
@@ -265,7 +265,7 @@ function InventoryEditFields({
           type="date"
           required
           defaultValue={toDateInputValue(row.expiryDate)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+          className="app-input"
         />
       </label>
 
@@ -278,7 +278,7 @@ function InventoryEditFields({
           min="0"
           step="0.01"
           defaultValue={row.purchasePrice ?? ""}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+          className="app-input"
         />
       </label>
 
@@ -291,7 +291,7 @@ function InventoryEditFields({
           min="0"
           step="0.01"
           defaultValue={row.sellingPrice ?? ""}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+          className="app-input"
         />
       </label>
     </div>
@@ -547,11 +547,11 @@ export function InventoryTable({
         />
       ) : null}
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <h3 className="text-lg font-semibold text-slate-950">Add inventory batch</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <h3 className="text-lg font-semibold text-slate-900">Add inventory batch</h3>
+            <p className="mt-1 text-sm text-slate-500">
               Create a new batch manually without re-uploading a CSV file.
             </p>
           </div>
@@ -564,15 +564,11 @@ export function InventoryTable({
         </div>
 
         {feedback.error ? (
-          <p className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {feedback.error}
-          </p>
+          <p className="app-panel-danger mt-5">{feedback.error}</p>
         ) : null}
 
         {feedback.success ? (
-          <p className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            {feedback.success}
-          </p>
+          <p className="app-panel-success mt-5">{feedback.success}</p>
         ) : null}
 
         <form
@@ -591,7 +587,7 @@ export function InventoryTable({
               disabled={!medicineOptions.length}
               value={selectedMedicineId}
               onChange={(event) => setSelectedMedicineId(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="app-input"
             >
               <option value="" disabled>
                 {medicineOptions.length ? "Select medicine" : "No medicines available yet"}
@@ -613,7 +609,7 @@ export function InventoryTable({
               name="batchNumber"
               type="text"
               required
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+              className="app-input"
             />
           </div>
 
@@ -627,7 +623,7 @@ export function InventoryTable({
               type="number"
               min="0"
               required
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+              className="app-input"
             />
           </div>
 
@@ -640,7 +636,7 @@ export function InventoryTable({
               name="expiryDate"
               type="date"
               required
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+              className="app-input"
             />
           </div>
 
@@ -654,7 +650,7 @@ export function InventoryTable({
               type="number"
               step="0.01"
               min="0"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+              className="app-input"
             />
           </div>
 
@@ -668,7 +664,7 @@ export function InventoryTable({
               type="number"
               step="0.01"
               min="0"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+              className="app-input"
             />
           </div>
 
@@ -676,7 +672,7 @@ export function InventoryTable({
             <button
               type="submit"
               disabled={isPending || !medicineOptions.length}
-              className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="app-button-primary"
             >
               {isPending ? "Saving..." : "Add batch"}
             </button>
@@ -689,12 +685,12 @@ export function InventoryTable({
         </form>
       </div>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <section className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-950">Inventory table</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
+              <h3 className="text-lg font-semibold text-slate-900">Inventory table</h3>
+              <p className="mt-1 text-sm text-slate-500">
                 Search, filter, and sort batches quickly for daily stock operations.
               </p>
             </div>
@@ -710,13 +706,13 @@ export function InventoryTable({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search by medicine, batch number, or SKU"
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                  className="app-input"
                 />
                 <button
                   type="button"
                   onClick={handleOpenClearInventoryModal}
                   disabled={isPending || rows.length === 0}
-                  className="inline-flex shrink-0 items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="app-button-danger"
                 >
                   {isPending && showClearInventoryModal ? "Clearing..." : "Clear Inventory"}
                 </button>
@@ -724,7 +720,7 @@ export function InventoryTable({
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="app-card-muted flex flex-col gap-4 p-4">
             <div className="flex flex-wrap gap-2">
               <SortButton
                 active={statusFilter === "all"}
@@ -757,7 +753,7 @@ export function InventoryTable({
                   id="inventory-category-filter"
                   value={categoryFilter}
                   onChange={(event) => setCategoryFilter(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                  className="app-input"
                 >
                   <option value="all">All categories</option>
                   {categoryOptions.map((category) => (
@@ -776,7 +772,7 @@ export function InventoryTable({
                   id="inventory-sort-by"
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                  className="app-input"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
@@ -790,7 +786,7 @@ export function InventoryTable({
                 <button
                   type="button"
                   onClick={resetInventoryView}
-                  className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 xl:w-auto"
+                  className="app-button-secondary inline-flex w-full xl:w-auto"
                 >
                   Reset view
                 </button>
@@ -806,16 +802,16 @@ export function InventoryTable({
         </div>
 
         {rows.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+          <div className="app-empty-state mt-6">
             No inventory has been imported yet. Upload a CSV file above to create your first batch records.
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+          <div className="app-empty-state mt-6">
             <p>No inventory rows match your current search, filters, or sorting view.</p>
             <button
               type="button"
               onClick={resetInventoryView}
-              className="mt-4 inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              className="app-button-secondary mt-4"
             >
               Clear filters
             </button>
@@ -827,7 +823,7 @@ export function InventoryTable({
                 const formId = `edit-batch-${row.id}`;
 
                 return (
-                  <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div key={row.id} className="app-card-muted p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-base font-semibold text-slate-950">{row.medicineName}</p>
@@ -837,7 +833,7 @@ export function InventoryTable({
                         </p>
                       </div>
                       <span
-                        className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                        className={`app-badge ${getStatusClasses(
                           row.status,
                         )}`}
                       >
@@ -881,7 +877,7 @@ export function InventoryTable({
                             <button
                               type="submit"
                               disabled={isPending}
-                              className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="app-button-primary w-full"
                             >
                               Save changes
                             </button>
@@ -889,7 +885,7 @@ export function InventoryTable({
                           <button
                             type="button"
                             onClick={() => setActiveEditId(null)}
-                            className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                            className="app-button-secondary w-full"
                           >
                             Cancel
                           </button>
@@ -900,14 +896,14 @@ export function InventoryTable({
                         <button
                           type="button"
                           onClick={() => setActiveEditId(row.id)}
-                          className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                          className="app-button-secondary w-full"
                         >
                           Edit batch
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteBatch(row.id)}
-                          className="inline-flex w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                          className="app-button-danger w-full"
                         >
                           Delete batch
                         </button>
@@ -918,22 +914,23 @@ export function InventoryTable({
               })}
             </div>
 
-            <div className="mt-6 hidden overflow-x-auto lg:block">
-              <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-                <thead>
-                  <tr className="text-slate-500">
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Batch</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Expiry</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Purchase</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Selling</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">SKU</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Category</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Unit</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Imported</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Actions</th>
+            <div className="app-table-shell mt-6 hidden lg:block">
+              <div className="overflow-x-auto">
+                <table className="app-table">
+                  <thead>
+                  <tr>
+                    <th>Medicine</th>
+                    <th>Batch</th>
+                    <th>Status</th>
+                    <th>Quantity</th>
+                    <th>Expiry</th>
+                    <th>Purchase</th>
+                    <th>Selling</th>
+                    <th>SKU</th>
+                    <th>Category</th>
+                    <th>Unit</th>
+                    <th>Imported</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -951,7 +948,7 @@ export function InventoryTable({
                         </td>
                         <td className="border-b border-slate-100 px-3 py-4">
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                            className={`app-badge ${getStatusClasses(
                               row.status,
                             )}`}
                           >
@@ -969,7 +966,7 @@ export function InventoryTable({
                                 min="0"
                                 required
                                 defaultValue={row.quantity}
-                                className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                                className="app-input min-w-[80px]"
                               />
                             </td>
                             <td className="border-b border-slate-100 px-3 py-4">
@@ -979,7 +976,7 @@ export function InventoryTable({
                                 type="date"
                                 required
                                 defaultValue={toDateInputValue(row.expiryDate)}
-                                className="w-36 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                                className="app-input min-w-[140px]"
                               />
                             </td>
                             <td className="border-b border-slate-100 px-3 py-4">
@@ -990,7 +987,7 @@ export function InventoryTable({
                                 min="0"
                                 step="0.01"
                                 defaultValue={row.purchasePrice ?? ""}
-                                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                                className="app-input min-w-[100px]"
                               />
                             </td>
                             <td className="border-b border-slate-100 px-3 py-4">
@@ -1001,7 +998,7 @@ export function InventoryTable({
                                 min="0"
                                 step="0.01"
                                 defaultValue={row.sellingPrice ?? ""}
-                                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-accent focus:ring-2 focus:ring-teal-100"
+                                className="app-input min-w-[100px]"
                               />
                             </td>
                           </>
@@ -1042,7 +1039,7 @@ export function InventoryTable({
                                 <button
                                   type="submit"
                                   disabled={isPending}
-                                  className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="app-button-primary px-3 py-1.5 text-xs"
                                 >
                                   Save
                                 </button>
@@ -1050,7 +1047,7 @@ export function InventoryTable({
                               <button
                                 type="button"
                                 onClick={() => setActiveEditId(null)}
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                                className="app-button-secondary px-3 py-1.5 text-xs"
                               >
                                 Cancel
                               </button>
@@ -1060,14 +1057,14 @@ export function InventoryTable({
                               <button
                                 type="button"
                                 onClick={() => setActiveEditId(row.id)}
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                                className="app-button-secondary px-3 py-1.5 text-xs"
                               >
                                 Edit
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteBatch(row.id)}
-                                className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                                className="app-button-danger px-3 py-1.5 text-xs"
                               >
                                 Delete
                               </button>
@@ -1077,8 +1074,9 @@ export function InventoryTable({
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

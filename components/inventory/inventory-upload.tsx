@@ -40,7 +40,7 @@ function ImportSubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      className="app-button-primary"
     >
       {label}
     </button>
@@ -81,8 +81,8 @@ function SummaryStat({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-2 text-xl font-semibold text-slate-900">{value}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{value}</p>
     </div>
   );
 }
@@ -181,16 +181,19 @@ export function InventoryUpload() {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
-            <h3 className="text-lg font-semibold text-slate-950">Inventory CSV upload</h3>
+            <p className="app-kicker">CSV-first import</p>
+            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+              Inventory CSV upload
+            </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Upload batch-based inventory data, validate it before import, and keep repeated CSV refreshes predictable for your team.
             </p>
             <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <div className="app-card-muted px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Required columns
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-700">
@@ -198,8 +201,8 @@ export function InventoryUpload() {
                   <code>expiry_date</code>
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <div className="app-card-muted px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Optional columns
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-700">
@@ -212,12 +215,12 @@ export function InventoryUpload() {
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+            <div className="app-card-muted mt-4 px-4 py-3 text-sm leading-6 text-slate-600">
               Use a comma-separated file with one header row. Dates work best in <code>YYYY-MM-DD</code>{" "}
               format. Common header variations like <code>qty</code>, <code>expiry</code>, and{" "}
               <code>batch no</code> are accepted automatically when they clearly map to the expected columns.
             </div>
-            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+            <div className="app-panel-info mt-4">
               Matching batches are updated using snapshot logic. If a row matches the same medicine
               and batch number, PharmaFlow replaces the stored quantity and batch details with the
               uploaded values. Quantity is replaced, not added, and batches missing from the file
@@ -229,11 +232,11 @@ export function InventoryUpload() {
             <button
               type="button"
               onClick={handleDownloadTemplate}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="app-button-secondary"
             >
               Download sample CSV
             </button>
-            <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 sm:w-auto">
+            <label className="app-button-subtle inline-flex w-full cursor-pointer sm:w-auto">
               <input
                 type="file"
                 accept=".csv,text/csv"
@@ -247,43 +250,35 @@ export function InventoryUpload() {
 
         <div className="mt-5 space-y-3">
           {fileName ? (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <p className="app-card-muted px-4 py-3 text-sm text-slate-600">
               Selected file: <span className="font-medium text-slate-900">{fileName}</span>
             </p>
           ) : null}
 
           {parseError ? (
-            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {parseError}
-            </p>
+            <p className="app-panel-danger">{parseError}</p>
           ) : null}
 
           {!parseError && parseWarnings.length ? (
-            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              {parseWarnings[0]}
-            </p>
+            <p className="app-panel-warning">{parseWarnings[0]}</p>
           ) : null}
 
           {missingColumns.length ? (
-            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <p className="app-panel-danger">
               Missing required columns: {missingColumns.join(", ")}.
             </p>
           ) : null}
 
           {importState.error ? (
-            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {importState.error}
-            </p>
+            <p className="app-panel-danger">{importState.error}</p>
           ) : null}
 
           {importState.success ? (
-            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {importState.success}
-            </p>
+            <p className="app-panel-success">{importState.success}</p>
           ) : null}
 
           {(importState.success || importState.error) && importState.totalParsedRows > 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="app-card-muted p-4">
               <p className="text-sm font-medium text-slate-900">Last import result</p>
               <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
                 <SummaryStat label="Rows parsed" value={importState.totalParsedRows} />
@@ -297,9 +292,9 @@ export function InventoryUpload() {
               </div>
             </div>
           ) : null}
-        </div>
+      </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-4">
           <SummaryStat label="Preview rows" value={previewRows.length} />
           <SummaryStat label="Valid rows" value={validRows.length} />
           <SummaryStat label="Invalid rows" value={rejectedRowsCount} />
@@ -335,15 +330,16 @@ export function InventoryUpload() {
         </form>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-950">Preview</h3>
+            <p className="app-kicker">Validation preview</p>
+            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Preview</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Rows are trimmed, empty lines are skipped, and row-level issues are shown before import.
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="app-card-muted px-4 py-3 text-sm text-slate-600">
             Expected columns: {supportedInventoryColumns.join(", ")}
           </div>
         </div>
@@ -352,7 +348,7 @@ export function InventoryUpload() {
           <>
             <div className="mt-6 space-y-4 md:hidden">
               {previewRows.map((row) => (
-                <div key={row.rowNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={row.rowNumber} className="app-card-muted p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -393,7 +389,7 @@ export function InventoryUpload() {
                   </div>
 
                   {row.errors.length ? (
-                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                    <div className="app-panel-danger mt-4">
                       <PreviewStatus row={row} />
                     </div>
                   ) : null}
@@ -401,59 +397,61 @@ export function InventoryUpload() {
               ))}
             </div>
 
-            <div className="mt-6 hidden overflow-x-auto md:block">
-              <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+            <div className="app-table-shell mt-6 hidden md:block">
+              <div className="overflow-x-auto">
+              <table className="app-table">
                 <thead>
-                  <tr className="text-slate-500">
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Row</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Batch</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Expiry</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">SKU</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Category</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Unit</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
+                  <tr>
+                    <th>Row</th>
+                    <th>Medicine</th>
+                    <th>Batch</th>
+                    <th>Quantity</th>
+                    <th>Expiry</th>
+                    <th>SKU</th>
+                    <th>Category</th>
+                    <th>Unit</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewRows.map((row) => (
                     <tr key={row.rowNumber} className="align-top">
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-500">
+                      <td className="text-slate-500">
                         {row.rowNumber}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.medicine_name || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.batch_number || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.quantity || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.expiry_date || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.sku || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.category || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                      <td className="text-slate-900">
                         {row.values.unit || "—"}
                       </td>
-                      <td className="border-b border-slate-100 px-3 py-3">
+                      <td>
                         <PreviewStatus row={row} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </>
         ) : (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+          <div className="app-empty-state mt-6">
             No rows to preview yet. Upload a CSV file to validate and inspect the data before importing it.
           </div>
         )}

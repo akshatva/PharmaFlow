@@ -4,6 +4,21 @@
 
 :root {
   color-scheme: light;
+  --app-bg: #f8fafb;
+  --app-panel: #ffffff;
+  --app-panel-muted: #f8fafc;
+  --app-border: #e2e8f0;
+  --app-border-strong: #cbd5e1;
+  --app-text: #0f172a;
+  --app-text-muted: #64748b;
+  --app-accent: #2563eb;
+  --app-accent-soft: #eff6ff;
+  --app-success: #16a34a;
+  --app-success-soft: #f0fdf4;
+  --app-warning: #d97706;
+  --app-warning-soft: #fffbeb;
+  --app-danger: #dc2626;
+  --app-danger-soft: #fef2f2;
 }
 
 * {
@@ -17,10 +32,10 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 28%),
-    linear-gradient(180deg, #f8fbfd 0%, #f4f7fb 100%);
-  color: #142033;
+  background: var(--app-bg);
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -29,6 +44,194 @@ a {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
+}
+
+/* ------------------------------------------------------------------ */
+/*  SCROLLBAR                                                         */
+/* ------------------------------------------------------------------ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ------------------------------------------------------------------ */
+/*  COMPONENT LAYER                                                   */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* --- Card -------------------------------------------------------- */
+  .app-card {
+    @apply rounded-xl border bg-white;
+    border-color: var(--app-border);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.03);
+  }
+
+  .app-card-muted {
+    @apply rounded-lg border;
+    background: var(--app-panel-muted);
+    border-color: var(--app-border);
+  }
+
+  /* --- Empty state ------------------------------------------------- */
+  .app-empty-state {
+    @apply rounded-lg border border-dashed px-5 py-10 text-center text-sm leading-6 text-slate-500;
+    background: var(--app-panel-muted);
+    border-color: var(--app-border);
+  }
+
+  /* --- Section headings -------------------------------------------- */
+  .app-section-title {
+    @apply text-lg font-semibold tracking-tight text-slate-900;
+  }
+
+  .app-section-copy {
+    @apply text-sm leading-6 text-slate-500;
+  }
+
+  /* --- Buttons ----------------------------------------------------- */
+  .app-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--app-accent);
+  }
+
+  .app-button-primary:hover:not(:disabled) {
+    background: #1d4ed8;
+  }
+
+  .app-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    border-color: var(--app-border);
+  }
+
+  .app-button-secondary:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: var(--app-border-strong);
+  }
+
+  .app-button-subtle {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--app-panel-muted);
+    border-color: var(--app-border);
+  }
+
+  .app-button-subtle:hover:not(:disabled) {
+    background: #f1f5f9;
+  }
+
+  .app-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--app-danger);
+  }
+
+  .app-button-danger:hover:not(:disabled) {
+    background: #b91c1c;
+  }
+
+  /* --- Input ------------------------------------------------------- */
+  .app-input {
+    @apply w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50;
+    border-color: var(--app-border);
+  }
+
+  .app-input:focus {
+    border-color: var(--app-accent);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  }
+
+  /* --- Badge ------------------------------------------------------- */
+  .app-badge {
+    @apply inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium leading-5;
+  }
+
+  /* --- Info panels ------------------------------------------------- */
+  .app-panel-info {
+    @apply rounded-lg border px-4 py-3 text-sm leading-6;
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1e40af;
+  }
+
+  .app-panel-warning {
+    @apply rounded-lg border px-4 py-3 text-sm leading-6;
+    border-color: #fcd34d;
+    background: var(--app-warning-soft);
+    color: #92400e;
+  }
+
+  .app-panel-success {
+    @apply rounded-lg border px-4 py-3 text-sm leading-6;
+    border-color: #86efac;
+    background: var(--app-success-soft);
+    color: #166534;
+  }
+
+  .app-panel-danger {
+    @apply rounded-lg border px-4 py-3 text-sm leading-6;
+    border-color: #fecaca;
+    background: var(--app-danger-soft);
+    color: var(--app-danger);
+  }
+
+  /* --- Table ------------------------------------------------------- */
+  .app-table-shell {
+    @apply overflow-hidden rounded-xl border bg-white;
+    border-color: var(--app-border);
+  }
+
+  .app-table {
+    @apply min-w-full border-separate border-spacing-0 text-left text-sm;
+  }
+
+  .app-table thead tr {
+    @apply bg-slate-50 text-slate-500;
+  }
+
+  .app-table th {
+    @apply border-b px-4 py-3 text-xs font-semibold uppercase tracking-wider;
+    border-color: var(--app-border);
+  }
+
+  .app-table td {
+    @apply border-b px-4 py-3.5 align-top text-slate-700;
+    border-color: #f1f5f9;
+  }
+
+  .app-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* --- Stat card --------------------------------------------------- */
+  .app-stat-card {
+    @apply rounded-xl border bg-white p-5;
+    border-color: var(--app-border);
+  }
+
+  .app-stat-eyebrow {
+    @apply text-xs font-medium uppercase tracking-wider text-slate-500;
+  }
+
+  .app-stat-value {
+    @apply mt-2 text-2xl font-semibold tracking-tight text-slate-900;
+  }
+
+  /* --- Kicker ------------------------------------------------------ */
+  .app-kicker {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-400;
+  }
 }

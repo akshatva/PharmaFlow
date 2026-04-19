@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
 
 import { SectionIntro } from "@/components/layout/section-intro";
 import { SetupNotice } from "@/components/layout/setup-notice";
@@ -62,9 +63,9 @@ function getConfidenceClasses(confidenceLevel: ProductForecastRow["confidenceLev
     case "medium":
       return "border-blue-200 bg-blue-50 text-blue-700";
     case "low":
-      return "border-slate-200 bg-slate-100 text-slate-700";
+      return "border-slate-200 bg-slate-100 text-slate-600";
     default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
+      return "border-slate-200 bg-slate-50 text-slate-500";
   }
 }
 
@@ -75,7 +76,18 @@ function getTrendClasses(trendDirection: ProductForecastRow["trendDirection"]) {
     case "decreasing":
       return "border-blue-200 bg-blue-50 text-blue-700";
     default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function getRiskIcon(risk: ProductForecastRow["stockRisk"]) {
+  switch (risk) {
+    case "High risk":
+      return AlertTriangle;
+    case "Medium":
+      return TrendingUp;
+    default:
+      return CheckCircle2;
   }
 }
 
@@ -198,104 +210,99 @@ export default async function ForecastPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Medicines</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{rows.length}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Medicines</p>
+          <p className="app-stat-value">{rows.length}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">High Risk</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{highRiskCount}</p>
+        <div className="app-stat-card border-l-2 border-l-red-400">
+          <p className="app-stat-eyebrow">High risk</p>
+          <p className="app-stat-value text-red-700">{highRiskCount}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Medium Risk</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{mediumRiskCount}</p>
+        <div className="app-stat-card border-l-2 border-l-amber-400">
+          <p className="app-stat-eyebrow">Medium risk</p>
+          <p className="app-stat-value text-amber-700">{mediumRiskCount}</p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Safe</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{safeCount}</p>
+        <div className="app-stat-card border-l-2 border-l-emerald-400">
+          <p className="app-stat-eyebrow">Safe</p>
+          <p className="app-stat-value text-emerald-700">{safeCount}</p>
         </div>
       </div>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-950">Forecast table</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Critical items appear first. Forecast rows show current stock, predicted demand,
-            stock coverage, selected model, confidence, and a short explanation.
+      <section className="app-card">
+        <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
+          <h3 className="text-sm font-semibold text-slate-900">Forecast table</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Critical items appear first. Shows current stock, predicted demand, stock coverage, selected model, and confidence.
           </p>
         </div>
 
         {rows.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            No saved forecast output is available yet. Generate forecasts after you have medicine
-            and sales data, then refresh this page.
+          <div className="px-5 py-12 sm:px-6">
+            <div className="app-empty-state">
+              No saved forecast output is available yet. Generate forecasts after you have medicine
+              and sales data, then refresh this page.
+            </div>
           </div>
         ) : (
-          <div className="mt-6 overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+          <div className="overflow-x-auto">
+            <table className="app-table">
               <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Forecast 7d</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Forecast 30d</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Days Left</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Risk</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Trend</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Confidence</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Model</th>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Current Stock</th>
+                  <th>Forecast 7d</th>
+                  <th>Forecast 30d</th>
+                  <th>Days Left</th>
+                  <th>Risk</th>
+                  <th>Trend</th>
+                  <th>Confidence</th>
+                  <th>Model</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.medicineId}>
-                    <td className="border-b border-slate-100 px-3 py-4">
+                    <td>
                       <div className="space-y-1">
                         <p className="font-medium text-slate-900">{row.medicineName}</p>
-                        <p className="text-xs leading-5 text-slate-500">{row.explainabilityNote}</p>
-                        <p className="text-xs leading-5 text-slate-500">{row.confidenceNote}</p>
+                        <p className="text-xs leading-5 text-slate-400">{row.explainabilityNote}</p>
+                        <p className="text-xs leading-5 text-slate-400">{row.confidenceNote}</p>
                       </div>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
+                    <td className="font-medium tabular-nums">
                       {row.currentStock}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
+                    <td className="tabular-nums">
                       {formatDecimal(row.forecast7d)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
+                    <td className="tabular-nums">
                       {formatDecimal(row.forecast30d)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
+                    <td className="tabular-nums">
                       {formatDaysOfStockLeft(row.daysOfStockLeft)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4">
+                    <td>
                       <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getRiskClasses(
-                          row.stockRisk,
-                        )}`}
+                        className={`app-badge ${getRiskClasses(row.stockRisk)}`}
                       >
                         {row.stockRisk}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4">
+                    <td>
                       <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium capitalize ${getTrendClasses(
-                          row.trendDirection,
-                        )}`}
+                        className={`app-badge capitalize ${getTrendClasses(row.trendDirection)}`}
                       >
                         {row.trendDirection}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4">
+                    <td>
                       <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium capitalize ${getConfidenceClasses(
-                          row.confidenceLevel,
-                        )}`}
+                        className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}
                       >
                         {row.confidenceLevel ?? "none"}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
+                    <td className="text-slate-500">
                       {row.modelName ?? "No model"}
                     </td>
                   </tr>

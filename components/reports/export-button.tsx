@@ -59,7 +59,7 @@ export function ExportButton({ href, label }: ExportButtonProps) {
         type="button"
         onClick={handleExport}
         disabled={isPending}
-        className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        className="app-button-secondary"
       >
         {isPending ? "Exporting..." : label}
       </button>

@@ -162,11 +162,11 @@ function SummaryCard({
   helperText?: string;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
+    <div className="app-stat-card">
+      <p className="app-stat-eyebrow">{label}</p>
+      <p className="app-stat-value">{value}</p>
       {helperText ? (
-        <p className="mt-2 text-sm leading-6 text-slate-600">{helperText}</p>
+        <p className="mt-1.5 text-xs leading-5 text-slate-400">{helperText}</p>
       ) : null}
     </div>
   );
@@ -186,19 +186,21 @@ function InsightSection({
   const hasContent = Boolean(children);
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div>
-        <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+    <section className="app-card">
+      <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
 
-      {hasContent ? (
-        <div className="mt-6">{children}</div>
-      ) : (
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-          {emptyText}
-        </div>
-      )}
+      <div className="px-5 py-5 sm:px-6">
+        {hasContent ? (
+          <div>{children}</div>
+        ) : (
+          <div className="app-empty-state">
+            {emptyText}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -215,10 +217,10 @@ function FilterLink({
   return (
     <Link
       href={href}
-      className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
+      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
         active
-          ? "border-slate-950 bg-slate-950 text-white"
-          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
       }`}
     >
       {label}
@@ -1002,54 +1004,43 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         title="Insights"
         description="Movement-based inventory signals using current stock, batch expiry, and the last 30 days of sales activity."
       />
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <ExportButton href="/api/exports/low-stock" label="Export Low Stock Report" />
         <ExportButton href="/api/exports/expiry" label="Export Expiry Report" />
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">
+      <div className="app-panel-info">
         Inventory data last updated on{" "}
-        <span className="font-medium text-slate-900">{formatDateTime(latestInventoryImportAt)}</span>.
-        Sales-based insights and reorder signals on this page are based on the last 30 days of sales
-        unless a section explicitly says otherwise.
+        <span className="font-medium">{formatDateTime(latestInventoryImportAt)}</span>.
+        Sales-based insights and reorder signals are based on the last 30 days of sales.
       </div>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-950">Operational metrics</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            A compact view of current risk, suggested action, and data freshness based on the
-            insight rules already used throughout PharmaFlow.
-          </p>
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <SummaryCard
-            label="At-Risk Inventory Value"
-            value={formatCurrency(atRiskInventoryValue)}
-            helperText="Estimated using purchase price where available for near-expiry or slow-moving stock."
-          />
-          <SummaryCard
-            label="Medicines At Stockout Risk"
-            value={stockRunOutSoonCount}
-            helperText="Medicines currently flagged as likely to run out soon from existing stock-cover logic."
-          />
-          <SummaryCard
-            label="Reorder Recommendations"
-            value={reorderRecommendationCount}
-            helperText="Medicines with a positive rules-based reorder quantity."
-          />
-          <SummaryCard
-            label="Items Needing Attention"
-            value={actionableInsightCount}
-            helperText="Open workflow items across stockout, expiry, and reorder views."
-          />
-          <SummaryCard
-            label="Inventory Last Updated"
-            value={formatDateTime(latestInventoryImportAt)}
-            helperText="Latest CSV import refresh recorded for your inventory batches."
-          />
-        </div>
-      </section>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <SummaryCard
+          label="At-Risk Value"
+          value={formatCurrency(atRiskInventoryValue)}
+          helperText="Near-expiry or slow-moving stock, by purchase price."
+        />
+        <SummaryCard
+          label="Stockout Risk"
+          value={stockRunOutSoonCount}
+          helperText="Medicines likely to run out soon."
+        />
+        <SummaryCard
+          label="Reorder Needed"
+          value={reorderRecommendationCount}
+          helperText="Positive reorder quantity items."
+        />
+        <SummaryCard
+          label="Needs Attention"
+          value={actionableInsightCount}
+          helperText="Open workflow items."
+        />
+        <SummaryCard
+          label="Last Updated"
+          value={formatDateTime(latestInventoryImportAt)}
+          helperText="Latest CSV import refresh."
+        />
+      </div>
 
       <InsightSection
         title="Needs attention"
@@ -1116,25 +1107,22 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
             {filteredPriorityItems.length ? (
               <div className="space-y-3">
                 {filteredPriorityItems.map((item) => (
-                  <div
-                    key={item.key}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                  >
+                  <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-4">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap gap-2">
+                      <div className="space-y-2.5">
+                        <div className="flex flex-wrap gap-1.5">
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getSeverityClasses(
+                            className={`app-badge ${getSeverityClasses(
                               item.severity,
                             )}`}
                           >
                             {item.severity}
                           </span>
-                          <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                          <span className="app-badge border-slate-200 bg-slate-50 text-slate-600">
                             {item.issueTypeLabel}
                           </span>
                           <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getWorkflowStatusClasses(
+                            className={`app-badge ${getWorkflowStatusClasses(
                               item.workflowStatus,
                             )}`}
                           >
@@ -1143,9 +1131,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                         </div>
 
                         <div>
-                          <p className="text-base font-semibold text-slate-950">{item.medicineName}</p>
-                          <p className="mt-1 text-sm font-medium text-slate-700">{item.urgencyLabel}</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-600">{item.reason}</p>
+                          <p className="text-sm font-semibold text-slate-900">{item.medicineName}</p>
+                          <p className="mt-0.5 text-xs font-medium text-slate-600">{item.urgencyLabel}</p>
+                          <p className="mt-1.5 text-sm leading-relaxed text-slate-500">{item.reason}</p>
                         </div>
                       </div>
 
@@ -1163,7 +1151,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                 ))}
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+              <div className="app-empty-state">
                 No priority items match the current workflow filter.
               </div>
             )}
@@ -1177,34 +1165,35 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         emptyText="No stockout risk items are currently flagged."
       >
         {stockoutRiskRows.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+          <div className="app-table-shell">
+            <div className="overflow-x-auto">
+            <table className="app-table">
               <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Avg Daily Sales</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Current Stock</th>
+                  <th>Avg Daily Sales</th>
+                  <th>Days of Stock Left</th>
+                  <th>Priority</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
                 {stockoutRiskRows.map((row) => (
                   <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
+                    <td className="font-medium text-slate-900">
                       {row.medicineName}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {row.currentStock}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {formatDecimal(row.dailySalesAverage)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {formatDaysOfStockLeft(row.daysOfStockLeft)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
+                    <td>
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getForecastCoverageClasses(
                           row.coverageLabel,
@@ -1213,13 +1202,14 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                         {row.coverageLabel}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {`Stock will run out in ${formatDaysOfStockLeft(row.daysOfStockLeft)}.`}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ) : null}
       </InsightSection>
@@ -1230,41 +1220,42 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         emptyText="No near-expiry items are currently flagged."
       >
         {nearExpiryRows.length ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+          <div className="app-table-shell">
+            <div className="overflow-x-auto">
+            <table className="app-table">
               <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Batch</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Expiry Date</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Priority</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Batch</th>
+                  <th>Quantity</th>
+                  <th>Expiry Date</th>
+                  <th>Priority</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
                 {nearExpiryRows.map((row) => (
                   <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
+                    <td className="font-medium text-slate-900">
                       {row.medicineName}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {row.batchNumber}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {row.quantity}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {formatDate(row.expiryDate)}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
+                    <td>
                       <span
                         className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getBatchStatusClasses(row.status)}`}
                       >
                         {row.status}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td>
                       {row.daysUntilExpiry < 0
                         ? `Expired with ${row.quantity} units still in stock.`
                         : `Expires in ${row.daysUntilExpiry} day${row.daysUntilExpiry === 1 ? "" : "s"} with ${row.quantity} units remaining.`}
@@ -1273,6 +1264,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ) : null}
       </InsightSection>
@@ -1284,76 +1276,78 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       >
         {reorderSuggestions.length ? (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+            <div className="app-panel-info">
               {REORDER_TRANSPARENCY_COPY} Matching rows use a simple stock-cover rule. If there are
               no sales in the last 30 days, PharmaFlow shows “Not enough recent sales data” instead
               of a precise reorder quantity.
             </div>
 
-            <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-              <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Days of Stock Left</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommended Reorder</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Reason</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reorderSuggestions.map((row) => (
-                  <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
-                      <div className="space-y-1">
-                        <p>{row.medicineName}</p>
-                        <p className="text-xs text-slate-500">{row.reason}</p>
-                        <p className="text-xs text-slate-500">{row.confidenceNote}</p>
-                      </div>
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {formatDaysOfStockLeft(row.daysOfStockLeft)}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getReorderStatusClasses(
-                          row.status,
-                        )}`}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getReorderRecommendationClasses(row.recommendation)}`}
-                      >
-                        {row.recommendation}
-                      </span>
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.recommendedReorderQuantity === null ? "—" : row.recommendedReorderQuantity}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
-                      {row.reason}
-                    </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
-                      {!row.actionable ? (
-                        <span className="text-xs font-medium text-slate-500">No action recommended</span>
-                      ) : (
-                        <ReorderButton
-                          medicineId={row.id}
-                          reason={`${row.recommendation}: ${row.reason}`}
-                          existingPending={pendingReorderMedicineIds.has(row.id)}
-                        />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <div className="app-table-shell">
+              <div className="overflow-x-auto">
+                <table className="app-table">
+                  <thead>
+                    <tr>
+                      <th>Medicine</th>
+                      <th>Days of Stock Left</th>
+                      <th>Status</th>
+                      <th>Recommendation</th>
+                      <th>Recommended Reorder</th>
+                      <th>Reason</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reorderSuggestions.map((row) => (
+                      <tr key={row.id}>
+                        <td className="font-medium text-slate-900">
+                          <div className="space-y-1">
+                            <p>{row.medicineName}</p>
+                            <p className="text-xs text-slate-500">{row.reason}</p>
+                            <p className="text-xs text-slate-500">{row.confidenceNote}</p>
+                          </div>
+                        </td>
+                        <td>
+                          {formatDaysOfStockLeft(row.daysOfStockLeft)}
+                        </td>
+                        <td>
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getReorderStatusClasses(
+                              row.status,
+                            )}`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getReorderRecommendationClasses(row.recommendation)}`}
+                          >
+                            {row.recommendation}
+                          </span>
+                        </td>
+                        <td>
+                          {row.recommendedReorderQuantity === null ? "—" : row.recommendedReorderQuantity}
+                        </td>
+                        <td>
+                          {row.reason}
+                        </td>
+                        <td>
+                          {!row.actionable ? (
+                            <span className="text-xs font-medium text-slate-500">No action recommended</span>
+                          ) : (
+                            <ReorderButton
+                              medicineId={row.id}
+                              reason={`${row.recommendation}: ${row.reason}`}
+                              existingPending={pendingReorderMedicineIds.has(row.id)}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         ) : null}
       </InsightSection>
