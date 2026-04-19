@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ComponentType } from "react";
+import ScrollExpansionHeroDemo from "@/components/ui/scroll-expansion-hero-demo";
 import {
   AlertTriangle,
   BellRing,
@@ -13,12 +14,6 @@ import {
   ShieldCheck,
   Truck,
 } from "lucide-react";
-
-type StatCardProps = {
-  label: string;
-  value: string;
-  note: string;
-};
 
 type SectionHeadingProps = {
   eyebrow: string;
@@ -61,177 +56,11 @@ function FeatureCard({ icon: Icon, title, description }: FeatureCardProps) {
   );
 }
 
-function StatCard({ label, value, note }: StatCardProps) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{note}</p>
-    </div>
-  );
-}
-
 function CapabilityRow({ title, description }: CapabilityRowProps) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-white p-5">
       <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-    </div>
-  );
-}
-
-function HeroMockup() {
-  return (
-    <div className="rounded-[32px] border border-slate-200 bg-white p-4 shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950">
-        <div className="border-b border-white/10 bg-slate-900 px-5 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Operations Overview</p>
-              <h3 className="mt-2 text-lg font-semibold text-white">PharmaFlow Console</h3>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-              Live inventory state
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-4 bg-slate-950 p-4 xl:grid-cols-[1.4fr_0.95fr]">
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Low Stock</p>
-                <p className="mt-3 text-2xl font-semibold text-white">14</p>
-                <p className="mt-1 text-xs text-slate-400">Requires action today</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Expiring</p>
-                <p className="mt-3 text-2xl font-semibold text-white">9</p>
-                <p className="mt-1 text-xs text-slate-400">Within 30 days</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Draft POs</p>
-                <p className="mt-3 text-2xl font-semibold text-white">4</p>
-                <p className="mt-1 text-xs text-slate-400">Pending review</p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white p-4">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Inventory Table</p>
-                  <h4 className="mt-1 text-base font-semibold text-slate-950">Batch-aware stock view</h4>
-                </div>
-                <div className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600">
-                  Updated 2 min ago
-                </div>
-              </div>
-
-              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-                <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-500">
-                    <tr>
-                      <th className="border-b border-slate-200 px-4 py-3 font-medium">Medicine</th>
-                      <th className="border-b border-slate-200 px-4 py-3 font-medium">Batch</th>
-                      <th className="border-b border-slate-200 px-4 py-3 font-medium">Qty</th>
-                      <th className="border-b border-slate-200 px-4 py-3 font-medium">Expiry</th>
-                      <th className="border-b border-slate-200 px-4 py-3 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      ["Paracetamol 650", "PF-2031", "18", "12 Jun 2026", "Low stock"],
-                      ["Amoxicillin 500", "AM-1182", "62", "04 May 2026", "Expiring soon"],
-                      ["Metformin 500", "MF-4920", "11", "18 Aug 2026", "Reorder now"],
-                    ].map((row) => (
-                      <tr key={row[0]}>
-                        <td className="border-b border-slate-100 px-4 py-3 font-medium text-slate-900">
-                          {row[0]}
-                        </td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{row[1]}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{row[2]}</td>
-                        <td className="border-b border-slate-100 px-4 py-3 text-slate-600">{row[3]}</td>
-                        <td className="border-b border-slate-100 px-4 py-3">
-                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                            {row[4]}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-2 text-slate-300">
-                  <BellRing className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Alerts</p>
-                  <p className="text-xs text-slate-400">Operational signals requiring attention</p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {[
-                  "2 batches expiring within 15 days",
-                  "Metformin 500 will run out in 4.5 days",
-                  "Draft purchase order pending supplier confirmation",
-                ].map((item) => (
-                  <div key={item} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-200">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm font-semibold text-white">Reorder Recommendations</p>
-              <div className="mt-4 space-y-3">
-                {[
-                  { medicine: "Metformin 500", supplier: "HealthLine Supply", quantity: "180 units" },
-                  { medicine: "Azithromycin 500", supplier: "CareBridge Pharma", quantity: "90 units" },
-                ].map((item) => (
-                  <div key={item.medicine} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <p className="text-sm font-medium text-white">{item.medicine}</p>
-                    <p className="mt-1 text-xs text-slate-400">{item.supplier}</p>
-                    <p className="mt-3 text-xs uppercase tracking-[0.16em] text-slate-500">
-                      Suggested quantity
-                    </p>
-                    <p className="mt-1 text-sm text-slate-200">{item.quantity}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm font-semibold text-white">Supplier Workflow</p>
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-white">PO-2026-014</p>
-                    <p className="mt-1 text-xs text-slate-400">HealthLine Supply</p>
-                  </div>
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
-                    Draft
-                  </span>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-200">
-                  <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-                    3 line items
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-black/10 px-3 py-2">
-                    Receiving pending
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -283,60 +112,7 @@ export function PharmaFlowLandingPage() {
         </div>
       </header>
 
-      <section className="border-b border-slate-200">
-        <div className="mx-auto grid max-w-7xl gap-16 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              Operational clarity for modern pharmacy teams
-            </p>
-            <h1 className="mt-6 text-5xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-6xl">
-              Run inventory, purchasing, and pharmacy workflows from one system.
-            </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              PharmaFlow replaces spreadsheets and fragmented tools with a single operating layer
-              for stock control, expiry visibility, reorder decisions, supplier management, and
-              day-to-day pharmacy execution.
-            </p>
-
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Link
-                href="/sign-in"
-                className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                Get Started
-              </Link>
-              <a
-                href="#product-preview"
-                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                View Demo
-              </a>
-            </div>
-
-            <div className="mt-12 grid gap-4 sm:grid-cols-3">
-              <StatCard
-                label="Inventory"
-                value="Batch-aware"
-                note="Track quantities, batches, expiry dates, and stock health from one view."
-              />
-              <StatCard
-                label="Procurement"
-                value="Connected"
-                note="Move from reorder signals into supplier workflows and purchase orders without handoffs."
-              />
-              <StatCard
-                label="Visibility"
-                value="Operational"
-                note="Surface alerts, forecasts, and daily actions before they become costly gaps."
-              />
-            </div>
-          </div>
-
-          <div className="lg:pt-4">
-            <HeroMockup />
-          </div>
-        </div>
-      </section>
+      <ScrollExpansionHeroDemo />
 
       <section id="problem" className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
