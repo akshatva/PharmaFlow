@@ -117,7 +117,7 @@ export function AppSidebar() {
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {navGroups.map((group) => {
             const groupNavItems = group.items
-              .map((iconKey) => navItemsByIcon.get(iconKey))
+              .map((iconKey) => navItemsByIcon.get(iconKey as typeof appNavigation[number]["icon"]))
               .filter(Boolean) as typeof appNavigation[number][];
 
             if (groupNavItems.length === 0) return null;
