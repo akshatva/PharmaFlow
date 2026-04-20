@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { SectionIntro } from "@/components/layout/section-intro";
+import { DashboardFeatures } from "@/components/blocks/dashboard-features";
 
 const quickActions = [
   {
@@ -84,6 +85,8 @@ export default function DashboardPage() {
           );
         })}
       </section>
+
+      <DashboardFeatures />
 
       <section className="app-card p-6">
         <h3 className="text-sm font-semibold text-slate-900">Workflow guide</h3>

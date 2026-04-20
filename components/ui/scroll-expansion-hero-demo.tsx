@@ -147,25 +147,13 @@ export default function ScrollExpansionHeroDemo() {
         mediaType="video"
         mediaSrc="/pharmaW.mp4"
         bgImageSrc="https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=1920&q=80"
-        scrollToExpand="Scroll to explore the product"
+        scrollToExpand="Scroll to view the workspace"
       >
-        <div className="pt-16 md:pt-24 space-y-10">
+        <div className="pt-28 md:pt-40">
           <div className="mx-auto max-w-5xl">
             <Hero />
           </div>
-          <div className="mx-auto max-w-4xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Product walkthrough
-            </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-              The operational view should feel like the next step, not a layer on top of the hero
-            </h2>
-            <p className="mt-4 text-base leading-7 text-slate-600 sm:text-lg">
-              The hero holds attention first. The command-center preview arrives after the expansion, with more breathing room so the flow feels deliberate and premium.
-            </p>
-          </div>
-
-          <div className="mt-14 md:mt-20">
+          <div className="mt-20 md:mt-28">
             <CommandCenterPreview />
           </div>
         </div>
