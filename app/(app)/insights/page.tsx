@@ -9,13 +9,20 @@ import { ReorderButton } from "@/components/reorders/reorder-button";
 import {
   getInsightWorkflowKey,
   getInsightWorkflowStatusLabel,
+  getLocalDemandSignals,
   type InsightWorkflowStatus,
   type InsightWorkflowType,
 } from "@/services/insights";
 import {
   REORDER_TRANSPARENCY_COPY,
+  isDemandCategory,
   getRulesBasedReorderDecision,
 } from "@/services/inventory";
+import {
+  formatWeatherLocationInput,
+  getLocalWeatherSnapshot,
+  getMissingWeatherLocationFields,
+} from "@/services/weather";
 import { isMissingColumnError, isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -30,6 +37,7 @@ type InsightsPageProps = {
 type MedicineRecord = {
   id: string;
   name: string;
+  demand_category: string | null;
 };
 
 type BatchRecord = {
@@ -86,6 +94,7 @@ type MedicineInsight = {
   medicineName: string;
   currentStock: number;
   recentSales: number;
+  demandCategory: string | null;
 };
 
 type DeadStockInsight = MedicineInsight & {
@@ -109,14 +118,21 @@ type BatchIntelligenceRow = {
 
 type ReorderSuggestion = MedicineInsight & {
   averageDailySales30d: number | null;
+  baseAverageDailySales30d: number | null;
+  adjustedAverageDailySales30d: number | null;
   daysOfStockLeft: number | null;
   status: "Ready" | "Not enough recent sales data";
   recommendation: "Reorder Now" | "Reorder Soon" | "Monitor" | "Avoid Reorder";
   priority: "Urgent" | "High" | "Medium" | "Low";
   recommendedReorderQuantity: number | null;
+  baseRecommendedReorderQuantity: number | null;
   reason: string;
   confidenceNote: string;
   actionable: boolean;
+  demandSignalAdjusted: boolean;
+  appliedDemandSignalUpliftPercentage: number | null;
+  demandSignalTitle: string | null;
+  demandSignalExplanation: string | null;
 };
 
 type ForecastRow = MedicineInsight & {
@@ -561,31 +577,57 @@ function getBatchIntelligenceRows(records: BatchRecord[]) {
     .slice(0, 12);
 }
 
-function getReorderSuggestion(row: MedicineInsight): ReorderSuggestion | null {
+function getReorderSuggestion({
+  row,
+  activeSignalsByCategory,
+}: {
+  row: MedicineInsight;
+  activeSignalsByCategory: Map<string, ReturnType<typeof getLocalDemandSignals>[number]>;
+}): ReorderSuggestion | null {
   if (row.currentStock <= 0 && row.recentSales <= 0) {
     return null;
   }
 
+  const demandSignal =
+    row.demandCategory && isDemandCategory(row.demandCategory)
+      ? activeSignalsByCategory.get(row.demandCategory) ?? null
+      : null;
+
   const decision = getRulesBasedReorderDecision({
     currentStock: row.currentStock,
     recentSales30d: row.recentSales,
+    demandSignal: demandSignal
+      ? {
+          title: demandSignal.title,
+          upliftPercentage: demandSignal.upliftPercentage,
+          explanation: demandSignal.explanation,
+          category: demandSignal.category,
+        }
+      : null,
   });
 
   return {
     ...row,
     averageDailySales30d: decision.averageDailySales30d,
+    baseAverageDailySales30d: decision.baseAverageDailySales30d,
+    adjustedAverageDailySales30d: decision.adjustedAverageDailySales30d,
     daysOfStockLeft: decision.daysOfStockLeft,
     status:
       decision.availability === "available" ? "Ready" : "Not enough recent sales data",
     recommendation: decision.recommendation,
     priority: decision.priority,
     recommendedReorderQuantity: decision.recommendedReorderQuantity,
+    baseRecommendedReorderQuantity: decision.baseRecommendedReorderQuantity,
     reason: decision.explainabilityNote,
     confidenceNote: decision.confidenceNote,
     actionable:
       decision.availability === "available" &&
       (decision.recommendedReorderQuantity ?? 0) > 0 &&
       decision.recommendation !== "Avoid Reorder",
+    demandSignalAdjusted: decision.demandSignalAdjusted,
+    appliedDemandSignalUpliftPercentage: decision.appliedDemandSignalUpliftPercentage,
+    demandSignalTitle: decision.demandSignalTitle,
+    demandSignalExplanation: decision.demandSignalExplanation,
   };
 }
 
@@ -631,6 +673,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   recentSalesCutoff.setDate(recentSalesCutoff.getDate() - 30);
 
   const [
+    organizationQuery,
     { data: medicines, error: medicinesError },
     inventoryQuery,
     { data: recentSales, error: salesError },
@@ -638,8 +681,13 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     { data: workflowItems, error: workflowError },
   ] = await Promise.all([
     supabase
+      .from("organizations")
+      .select("city, state, country")
+      .eq("id", membership.organization_id)
+      .maybeSingle(),
+    supabase
       .from("medicines")
-      .select("id, name")
+      .select("id, name, demand_category")
       .eq("organization_id", membership.organization_id)
       .order("name", { ascending: true }),
     supabase
@@ -666,6 +714,10 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
   let inventoryBatches = inventoryQuery.data as BatchRecord[] | null;
   let inventoryError = inventoryQuery.error;
+  let medicineRows = (medicines ?? []) as MedicineRecord[];
+  let medicineError = medicinesError;
+  let organization = organizationQuery.data;
+  let organizationError = organizationQuery.error;
 
   if (isMissingColumnError(inventoryQuery.error, "last_imported_at")) {
     const fallbackInventoryQuery = await supabase
@@ -682,8 +734,33 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     inventoryError = fallbackInventoryQuery.error;
   }
 
+  if (isMissingColumnError(medicinesError, "demand_category")) {
+    const fallbackMedicinesQuery = await supabase
+      .from("medicines")
+      .select("id, name")
+      .eq("organization_id", membership.organization_id)
+      .order("name", { ascending: true });
+
+    medicineRows = ((fallbackMedicinesQuery.data ?? []) as Array<{ id: string; name: string }>).map(
+      (medicine) => ({
+        ...medicine,
+        demand_category: null,
+      }),
+    );
+    medicineError = fallbackMedicinesQuery.error;
+  }
+
+  if (
+    isMissingColumnError(organizationQuery.error, "city") ||
+    isMissingColumnError(organizationQuery.error, "state") ||
+    isMissingColumnError(organizationQuery.error, "country")
+  ) {
+    organization = null;
+    organizationError = null;
+  }
+
   const dataError =
-    medicinesError ?? inventoryError ?? salesError ?? reorderError ?? workflowError;
+    medicineError ?? inventoryError ?? salesError ?? reorderError ?? workflowError ?? organizationError;
 
   if (dataError) {
     if (isMissingRelationError(workflowError, "insight_workflow_items")) {
@@ -748,12 +825,45 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     );
   });
 
-  const insights = ((medicines ?? []) as MedicineRecord[]).map((medicine) => ({
+  const insights = medicineRows.map((medicine) => ({
     id: medicine.id,
     medicineName: medicine.name,
     currentStock: stockByMedicine.get(medicine.id) ?? 0,
     recentSales: salesByMedicine.get(medicine.id) ?? 0,
+    demandCategory: medicine.demand_category,
   }));
+  const localWeather = await getLocalWeatherSnapshot(organization ?? undefined);
+  const localDemandSignals = getLocalDemandSignals({
+    location: organization ?? undefined,
+    weather: localWeather,
+    availableCategories: medicineRows
+      .map((medicine) => medicine.demand_category ?? "")
+      .filter(Boolean),
+  });
+  const activeSignalsByCategory = new Map(
+    localDemandSignals.map((signal) => [signal.category, signal]),
+  );
+  const missingLocationFields = getMissingWeatherLocationFields(organization ?? undefined);
+  const hasRequiredWeatherLocation = missingLocationFields.length === 0;
+  const weatherAwareSignals = localDemandSignals.filter(
+    (signal) => signal.source === "weather" || signal.source === "seasonal_weather",
+  );
+  const weatherStatus = !hasRequiredWeatherLocation
+    ? "missing_location"
+    : !localWeather
+      ? "weather_unavailable"
+      : weatherAwareSignals.length
+        ? "live_active"
+        : "live_non_triggering";
+  const fallbackUsed = !localWeather || weatherAwareSignals.length === 0;
+  const weatherStatusMessage =
+    weatherStatus === "missing_location"
+      ? `Live weather is inactive because the organization is missing ${missingLocationFields.join(", ")}. Seasonal fallback is active.`
+      : weatherStatus === "weather_unavailable"
+        ? `Live weather could not be loaded for ${formatWeatherLocationInput(organization ?? undefined)}. Seasonal fallback is active.`
+        : weatherStatus === "live_non_triggering"
+          ? `Live weather is available for ${localWeather?.locationName}, but no weather-specific rules are active right now. Seasonal signals are shown where relevant.`
+          : `Live weather is active for ${localWeather?.locationName}. Weather-aware demand signals are included below.`;
 
   const medicinesWithStock = insights.filter((row) => row.currentStock > 0);
 
@@ -824,7 +934,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     .slice(0, 12);
 
   const reorderSuggestions = insights
-    .map((row) => getReorderSuggestion(row))
+    .map((row) =>
+      getReorderSuggestion({
+        row,
+        activeSignalsByCategory,
+      }),
+    )
     .filter((row): row is ReorderSuggestion => Boolean(row))
     .sort((a, b) => {
       const priorityWeight = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
@@ -1013,6 +1128,87 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         <span className="font-medium">{formatDateTime(latestInventoryImportAt)}</span>.
         Sales-based insights and reorder signals are based on the last 30 days of sales.
       </div>
+
+      <InsightSection
+        title="Local demand signals"
+        description="Simple demand indicators based on the current month, your pharmacy location, live weather when available, and medicine demand categories."
+        emptyText="No active local demand signals are available for your current medicine categories this month."
+      >
+        <div className="space-y-4">
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm ${
+              weatherStatus === "live_active"
+                ? "border-blue-200 bg-blue-50 text-blue-800"
+                : weatherStatus === "live_non_triggering"
+                  ? "border-slate-200 bg-slate-50 text-slate-700"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+            }`}
+          >
+            {weatherStatusMessage}
+          </div>
+          {localWeather ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                Live weather context
+              </p>
+              <p className="mt-1 text-sm text-slate-700">
+                {localWeather.summary} in {localWeather.locationName}
+              </p>
+            </div>
+          ) : null}
+          {process.env.NODE_ENV === "development" ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Weather debug
+              </p>
+              <div className="mt-2 space-y-1 text-xs text-slate-600">
+                <p>Org location used: {formatWeatherLocationInput(organization ?? undefined)}</p>
+                <p>
+                  Missing required fields:{" "}
+                  {missingLocationFields.length ? missingLocationFields.join(", ") : "none"}
+                </p>
+                <p>Weather status: {weatherStatus}</p>
+                <p>Fallback used: {fallbackUsed ? "yes" : "no"}</p>
+                <p>
+                  Resolved weather location: {localWeather?.locationName ?? "not resolved"}
+                </p>
+                <p>Weather snapshot: {localWeather?.summary ?? "not available"}</p>
+                <p>
+                  Triggered weather rules:{" "}
+                  {weatherAwareSignals.length
+                    ? weatherAwareSignals.map((signal) => signal.categoryLabel).join(", ")
+                    : "none"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+          {localDemandSignals.length ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {localDemandSignals.map((signal) => (
+                <div
+                  key={signal.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">{signal.title}</p>
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                      +{signal.upliftPercentage}%
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                    {signal.categoryLabel}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{signal.explanation}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="app-empty-state">
+              No active local demand signals are available for your current medicine categories this month.
+            </div>
+          )}
+        </div>
+      </InsightSection>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
@@ -1302,6 +1498,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                         <td className="font-medium text-slate-900">
                           <div className="space-y-1">
                             <p>{row.medicineName}</p>
+                            {row.demandSignalAdjusted ? (
+                              <p className="text-xs font-medium text-blue-700">
+                                Adjusted +{row.appliedDemandSignalUpliftPercentage}% for{" "}
+                                {row.demandSignalTitle?.toLowerCase()}
+                              </p>
+                            ) : null}
                             <p className="text-xs text-slate-500">{row.reason}</p>
                             <p className="text-xs text-slate-500">{row.confidenceNote}</p>
                           </div>
@@ -1326,10 +1528,26 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                           </span>
                         </td>
                         <td>
-                          {row.recommendedReorderQuantity === null ? "—" : row.recommendedReorderQuantity}
+                          <div className="space-y-1 text-sm">
+                            <p>
+                              {row.recommendedReorderQuantity === null ? "—" : row.recommendedReorderQuantity}
+                            </p>
+                            {row.demandSignalAdjusted &&
+                            row.baseRecommendedReorderQuantity !== null &&
+                            row.recommendedReorderQuantity !== null ? (
+                              <p className="text-xs text-slate-500">
+                                Base {row.baseRecommendedReorderQuantity} → Final {row.recommendedReorderQuantity}
+                              </p>
+                            ) : null}
+                          </div>
                         </td>
                         <td>
-                          {row.reason}
+                          <div className="space-y-1">
+                            <p>{row.reason}</p>
+                            {row.demandSignalAdjusted && row.demandSignalExplanation ? (
+                              <p className="text-xs text-slate-500">{row.demandSignalExplanation}</p>
+                            ) : null}
+                          </div>
                         </td>
                         <td>
                           {!row.actionable ? (
@@ -1337,7 +1555,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                           ) : (
                             <ReorderButton
                               medicineId={row.id}
-                              reason={`${row.recommendation}: ${row.reason}`}
+                              reason={`${row.recommendation}: ${row.reason}${
+                                row.demandSignalAdjusted && row.appliedDemandSignalUpliftPercentage !== null
+                                  ? ` Adjusted by ${row.appliedDemandSignalUpliftPercentage}% for active local demand signal.`
+                                  : ""
+                              }`}
                               existingPending={pendingReorderMedicineIds.has(row.id)}
                             />
                           )}

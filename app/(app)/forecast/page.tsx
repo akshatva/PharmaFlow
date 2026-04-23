@@ -1,19 +1,17 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, CheckCircle2, TrendingUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { SectionIntro } from "@/components/layout/section-intro";
 import { SetupNotice } from "@/components/layout/setup-notice";
-import {
-  buildProductForecastRows,
-  type ProductForecastRecord,
-  type ProductForecastRow,
-} from "@/lib/forecasting/product";
-import { isMissingRelationError } from "@/lib/supabase/errors";
+import type { ProductForecastRecord } from "@/lib/forecasting/product";
+import { formatDemandCategoryLabel } from "@/services/inventory";
+import { isMissingColumnError, isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type MedicineRecord = {
   id: string;
   name: string;
+  demand_category: string | null;
 };
 
 type InventoryBatchRecord = {
@@ -24,6 +22,21 @@ type InventoryBatchRecord = {
 type SalesRecord = {
   medicine_id: string;
   quantity_sold: number;
+};
+
+type ForecastPageRow = {
+  medicineId: string;
+  medicineName: string;
+  demandCategory: string | null;
+  baselineDailyDemand: number;
+  activeUpliftPercentage: number;
+  adjustedDailyDemand: number;
+  forecast7d: number;
+  currentStock: number;
+  daysOfStockLeft: number | null;
+  confidenceLevel: ProductForecastRecord["confidence_level"];
+  signalTitle: string | null;
+  signalExplanation: string | null;
 };
 
 function formatDecimal(value: number | null) {
@@ -45,18 +58,39 @@ function formatDaysOfStockLeft(value: number | null) {
   return `${formatDecimal(value)} days`;
 }
 
-function getRiskClasses(risk: ProductForecastRow["stockRisk"]) {
-  switch (risk) {
-    case "High risk":
-      return "border-red-200 bg-red-50 text-red-700";
-    case "Medium":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    default:
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+function getRiskClasses(daysOfStockLeft: number | null) {
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    return "border-red-200 bg-red-50 text-red-700";
   }
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
-function getConfidenceClasses(confidenceLevel: ProductForecastRow["confidenceLevel"]) {
+function getRiskLabel(daysOfStockLeft: number | null) {
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    return "High risk";
+  }
+
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 15) {
+    return "Medium";
+  }
+
+  return "Safe";
+}
+
+function getRiskIcon(daysOfStockLeft: number | null) {
+  if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
+    return AlertTriangle;
+  }
+
+  return CheckCircle2;
+}
+
+function getConfidenceClasses(confidenceLevel: ProductForecastRecord["confidence_level"]) {
   switch (confidenceLevel) {
     case "high":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -69,26 +103,18 @@ function getConfidenceClasses(confidenceLevel: ProductForecastRow["confidenceLev
   }
 }
 
-function getTrendClasses(trendDirection: ProductForecastRow["trendDirection"]) {
-  switch (trendDirection) {
-    case "increasing":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "decreasing":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
+function calculateDaysOfStockLeft({
+  currentStock,
+  adjustedDailyDemand,
+}: {
+  currentStock: number;
+  adjustedDailyDemand: number;
+}) {
+  if (adjustedDailyDemand <= 0) {
+    return null;
   }
-}
 
-function getRiskIcon(risk: ProductForecastRow["stockRisk"]) {
-  switch (risk) {
-    case "High risk":
-      return AlertTriangle;
-    case "Medium":
-      return TrendingUp;
-    default:
-      return CheckCircle2;
-  }
+  return Number((currentStock / adjustedDailyDemand).toFixed(2));
 }
 
 export default async function ForecastPage() {
@@ -120,11 +146,11 @@ export default async function ForecastPage() {
     { data: medicines, error: medicinesError },
     { data: inventoryBatches, error: inventoryError },
     { data: salesRecords, error: salesError },
-    { data: forecastResults, error: forecastError },
+    forecastQuery,
   ] = await Promise.all([
     supabase
       .from("medicines")
-      .select("id, name")
+      .select("id, name, demand_category")
       .eq("organization_id", membership.organization_id)
       .order("name", { ascending: true }),
     supabase
@@ -139,12 +165,53 @@ export default async function ForecastPage() {
     supabase
       .from("forecast_results")
       .select(
-        "medicine_id, model_name, forecast_7d, forecast_30d, daily_demand_avg, confidence_level, error_metric_name, error_metric_value, history_days_used, generated_at",
+        "medicine_id, model_name, forecast_7d, forecast_30d, daily_demand_avg, baseline_daily_demand, active_uplift_percentage, demand_signal_title, signal_explanation, confidence_level, error_metric_name, error_metric_value, history_days_used, generated_at",
       )
       .eq("organization_id", membership.organization_id),
   ]);
 
-  const dataError = medicinesError ?? inventoryError ?? salesError ?? forecastError;
+  let forecastResults = forecastQuery.data as ProductForecastRecord[] | null;
+  let forecastError = forecastQuery.error;
+  let medicineRows = (medicines ?? []) as MedicineRecord[];
+  let medicineError = medicinesError;
+
+  if (isMissingColumnError(medicinesError, "demand_category")) {
+    const fallbackMedicinesQuery = await supabase
+      .from("medicines")
+      .select("id, name")
+      .eq("organization_id", membership.organization_id)
+      .order("name", { ascending: true });
+
+    medicineRows = ((fallbackMedicinesQuery.data ?? []) as Array<{ id: string; name: string }>).map(
+      (medicine) => ({
+        ...medicine,
+        demand_category: "general",
+      }),
+    );
+    medicineError = fallbackMedicinesQuery.error;
+  }
+
+  if (isMissingColumnError(forecastQuery.error, "baseline_daily_demand")) {
+    const fallbackForecastQuery = await supabase
+      .from("forecast_results")
+      .select(
+        "medicine_id, model_name, forecast_7d, forecast_30d, daily_demand_avg, confidence_level, error_metric_name, error_metric_value, history_days_used, generated_at",
+      )
+      .eq("organization_id", membership.organization_id);
+
+    forecastResults = ((fallbackForecastQuery.data ?? []) as ProductForecastRecord[]).map(
+      (row) => ({
+        ...row,
+        baseline_daily_demand: row.daily_demand_avg,
+        active_uplift_percentage: 0,
+        demand_signal_title: null,
+        signal_explanation: "No saved signal-aware forecast explanation is available yet.",
+      }),
+    );
+    forecastError = fallbackForecastQuery.error;
+  }
+
+  const dataError = medicineError ?? inventoryError ?? salesError ?? forecastError;
 
   if (dataError) {
     if (isMissingRelationError(forecastError, "forecast_results")) {
@@ -153,7 +220,7 @@ export default async function ForecastPage() {
           <SectionIntro
             eyebrow="Forecasting"
             title="Demand Forecast"
-            description="Review predicted demand, stock coverage, selected models, and confidence before acting on replenishment decisions."
+            description="Review signal-adjusted demand, baseline sales pace, and short-horizon stock coverage before acting."
           />
           <SetupNotice
             title="Forecasting is not set up in Supabase yet"
@@ -190,23 +257,60 @@ export default async function ForecastPage() {
     ((forecastResults ?? []) as ProductForecastRecord[]).map((result) => [result.medicine_id, result]),
   );
 
-  const rows = buildProductForecastRows({
-    medicines: (medicines ?? []) as MedicineRecord[],
-    currentStockByMedicine,
-    recentSalesByMedicine,
-    forecastByMedicine,
-  });
+  const rows = medicineRows
+    .reduce<ForecastPageRow[]>((accumulator, medicine) => {
+      const forecast = forecastByMedicine.get(medicine.id);
 
-  const highRiskCount = rows.filter((row) => row.stockRisk === "High risk").length;
-  const mediumRiskCount = rows.filter((row) => row.stockRisk === "Medium").length;
-  const safeCount = rows.filter((row) => row.stockRisk === "Safe").length;
+      if (!forecast) {
+        return accumulator;
+      }
+
+      const currentStock = currentStockByMedicine.get(medicine.id) ?? 0;
+      const baselineDailyDemand = forecast.baseline_daily_demand ?? forecast.daily_demand_avg;
+      const activeUpliftPercentage = forecast.active_uplift_percentage ?? 0;
+      const adjustedDailyDemand = forecast.daily_demand_avg;
+
+      accumulator.push({
+        medicineId: medicine.id,
+        medicineName: medicine.name,
+        demandCategory: medicine.demand_category ?? "general",
+        baselineDailyDemand,
+        activeUpliftPercentage,
+        adjustedDailyDemand,
+        forecast7d: forecast.forecast_7d,
+        currentStock,
+        daysOfStockLeft: calculateDaysOfStockLeft({
+          currentStock,
+          adjustedDailyDemand,
+        }),
+        confidenceLevel: forecast.confidence_level,
+        signalTitle: forecast.demand_signal_title ?? null,
+        signalExplanation: forecast.signal_explanation ?? null,
+      });
+
+      return accumulator;
+    }, [])
+    .sort((first, second) => {
+      const firstDays = first.daysOfStockLeft ?? Number.POSITIVE_INFINITY;
+      const secondDays = second.daysOfStockLeft ?? Number.POSITIVE_INFINITY;
+
+      if (firstDays !== secondDays) {
+        return firstDays - secondDays;
+      }
+
+      return second.forecast7d - first.forecast7d;
+    });
+
+  const highRiskCount = rows.filter((row) => (row.daysOfStockLeft ?? 999) <= 7).length;
+  const adjustedCount = rows.filter((row) => row.activeUpliftPercentage > 0).length;
+  const neutralCount = rows.length - adjustedCount;
 
   return (
     <div className="space-y-6">
       <SectionIntro
         eyebrow="Forecasting"
         title="Demand Forecast"
-        description="Review predicted demand, stock coverage, selected models, and confidence before acting on replenishment decisions."
+        description="Signal-adjusted 7-day demand based on the last 30 days of sales and any active local demand uplift."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -218,13 +322,13 @@ export default async function ForecastPage() {
           <p className="app-stat-eyebrow">High risk</p>
           <p className="app-stat-value text-red-700">{highRiskCount}</p>
         </div>
-        <div className="app-stat-card border-l-2 border-l-amber-400">
-          <p className="app-stat-eyebrow">Medium risk</p>
-          <p className="app-stat-value text-amber-700">{mediumRiskCount}</p>
+        <div className="app-stat-card border-l-2 border-l-blue-400">
+          <p className="app-stat-eyebrow">Signal adjusted</p>
+          <p className="app-stat-value text-blue-700">{adjustedCount}</p>
         </div>
-        <div className="app-stat-card border-l-2 border-l-emerald-400">
-          <p className="app-stat-eyebrow">Safe</p>
-          <p className="app-stat-value text-emerald-700">{safeCount}</p>
+        <div className="app-stat-card">
+          <p className="app-stat-eyebrow">Neutral</p>
+          <p className="app-stat-value">{neutralCount}</p>
         </div>
       </div>
 
@@ -232,15 +336,14 @@ export default async function ForecastPage() {
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
           <h3 className="text-sm font-semibold text-slate-900">Forecast table</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Critical items appear first. Shows current stock, predicted demand, stock coverage, selected model, and confidence.
+            Shows baseline daily sales, active uplift, forecasted 7-day demand, and the short reason behind each forecast.
           </p>
         </div>
 
         {rows.length === 0 ? (
           <div className="px-5 py-12 sm:px-6">
             <div className="app-empty-state">
-              No saved forecast output is available yet. Generate forecasts after you have medicine
-              and sales data, then refresh this page.
+              No saved forecast output is available yet. Generate forecasts after you have medicine and sales data, then refresh this page.
             </div>
           </div>
         ) : (
@@ -249,64 +352,63 @@ export default async function ForecastPage() {
               <thead>
                 <tr>
                   <th>Medicine</th>
-                  <th>Current Stock</th>
+                  <th>Category</th>
+                  <th>Baseline Daily</th>
+                  <th>Active Uplift</th>
                   <th>Forecast 7d</th>
-                  <th>Forecast 30d</th>
                   <th>Days Left</th>
                   <th>Risk</th>
-                  <th>Trend</th>
                   <th>Confidence</th>
-                  <th>Model</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
-                  <tr key={row.medicineId}>
-                    <td>
-                      <div className="space-y-1">
-                        <p className="font-medium text-slate-900">{row.medicineName}</p>
-                        <p className="text-xs leading-5 text-slate-400">{row.explainabilityNote}</p>
-                        <p className="text-xs leading-5 text-slate-400">{row.confidenceNote}</p>
-                      </div>
-                    </td>
-                    <td className="font-medium tabular-nums">
-                      {row.currentStock}
-                    </td>
-                    <td className="tabular-nums">
-                      {formatDecimal(row.forecast7d)}
-                    </td>
-                    <td className="tabular-nums">
-                      {formatDecimal(row.forecast30d)}
-                    </td>
-                    <td className="tabular-nums">
-                      {formatDaysOfStockLeft(row.daysOfStockLeft)}
-                    </td>
-                    <td>
-                      <span
-                        className={`app-badge ${getRiskClasses(row.stockRisk)}`}
-                      >
-                        {row.stockRisk}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`app-badge capitalize ${getTrendClasses(row.trendDirection)}`}
-                      >
-                        {row.trendDirection}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}
-                      >
-                        {row.confidenceLevel ?? "none"}
-                      </span>
-                    </td>
-                    <td className="text-slate-500">
-                      {row.modelName ?? "No model"}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row) => {
+                  const RiskIcon = getRiskIcon(row.daysOfStockLeft);
+
+                  return (
+                    <tr key={row.medicineId}>
+                      <td>
+                        <div className="space-y-1">
+                          <p className="font-medium text-slate-900">{row.medicineName}</p>
+                          <p className="text-xs leading-5 text-slate-400">
+                            Adjusted daily demand: {formatDecimal(row.adjustedDailyDemand)}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="text-slate-600">
+                        {formatDemandCategoryLabel(row.demandCategory)}
+                      </td>
+                      <td className="tabular-nums">{formatDecimal(row.baselineDailyDemand)}</td>
+                      <td className="tabular-nums">
+                        {row.activeUpliftPercentage > 0 ? `+${row.activeUpliftPercentage}%` : "—"}
+                      </td>
+                      <td className="tabular-nums">{formatDecimal(row.forecast7d)}</td>
+                      <td className="tabular-nums">{formatDaysOfStockLeft(row.daysOfStockLeft)}</td>
+                      <td>
+                        <span className={`app-badge ${getRiskClasses(row.daysOfStockLeft)}`}>
+                          <RiskIcon className="mr-1 h-3.5 w-3.5" />
+                          {getRiskLabel(row.daysOfStockLeft)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
+                          {row.confidenceLevel ?? "none"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="space-y-1">
+                          <p className="text-sm text-slate-700">
+                            {row.signalTitle ?? "Baseline recent-sales forecast"}
+                          </p>
+                          <p className="text-xs leading-5 text-slate-500">
+                            {row.signalExplanation ?? "No active local demand signal is changing this forecast right now."}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

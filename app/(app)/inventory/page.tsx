@@ -5,6 +5,7 @@ import {
   InventoryTable,
   type InventoryTableRow,
 } from "@/components/inventory/inventory-table";
+import { MedicineDemandCategorySettings } from "@/components/inventory/medicine-demand-category-settings";
 import { InventoryUpload } from "@/components/inventory/inventory-upload";
 import { SectionIntro } from "@/components/layout/section-intro";
 import { ExportButton } from "@/components/reports/export-button";
@@ -134,11 +135,28 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
     inventoryError = inventoryQuery.error;
   }
 
-  const { data: medicines, error: medicinesError } = await supabase
+  const medicinesQuery = await supabase
     .from("medicines")
-    .select("id, name")
+    .select("id, name, demand_category")
     .eq("organization_id", membership.organization_id)
     .order("name", { ascending: true });
+
+  const medicines = isMissingColumnError(medicinesQuery.error, "demand_category")
+    ? (
+        await supabase
+          .from("medicines")
+          .select("id, name")
+          .eq("organization_id", membership.organization_id)
+          .order("name", { ascending: true })
+      ).data?.map((medicine) => ({
+        ...medicine,
+        demand_category: null,
+      }))
+    : medicinesQuery.data;
+
+  const medicinesError = isMissingColumnError(medicinesQuery.error, "demand_category")
+    ? null
+    : medicinesQuery.error;
 
   if (inventoryError || medicinesError) {
     throw new Error(
@@ -218,9 +236,13 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
       </div>
 
       <InventoryUpload />
+      <MedicineDemandCategorySettings medicines={medicines ?? []} />
       <InventoryTable
         rows={inventoryRows}
-        medicineOptions={medicines ?? []}
+        medicineOptions={(medicines ?? []).map((medicine) => ({
+          id: medicine.id,
+          name: medicine.name,
+        }))}
         initialQuery={resolvedSearchParams.query ?? ""}
         initialMedicineId={resolvedSearchParams.medicineId ?? ""}
       />

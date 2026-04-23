@@ -19,6 +19,7 @@
   --app-warning-soft: #fffbeb;
   --app-danger: #dc2626;
   --app-danger-soft: #fef2f2;
+
 }
 
 * {
@@ -75,6 +76,7 @@ textarea {
 /*  COMPONENT LAYER                                                   */
 /* ------------------------------------------------------------------ */
 @layer components {
+
   /* --- Card -------------------------------------------------------- */
   .app-card {
     @apply rounded-xl border bg-white;

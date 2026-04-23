@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { generateDemandForecast, type ConfidenceLevel, type ErrorMetricName } from "@/lib/forecasting/model";
+import { isMissingColumnError } from "@/lib/supabase/errors";
+import { getLocalDemandSignals } from "@/services/insights";
+import { isDemandCategory } from "@/services/inventory";
+import { getLocalWeatherSnapshot } from "@/services/weather";
 
 type MedicineRecord = {
   id: string;
   name: string;
+  demand_category: string | null;
 };
 
 type SalesRecord = {
@@ -21,6 +25,7 @@ export type DailyDemandPoint = {
 export type PreparedDailyDemand = {
   medicineId: string;
   medicineName: string;
+  demandCategory: string | null;
   dailyDemand: DailyDemandPoint[];
 };
 
@@ -28,12 +33,17 @@ export type GeneratedForecastRow = {
   organizationId: string;
   medicineId: string;
   medicineName: string;
+  demandCategory: string | null;
   modelName: string;
   forecast7d: number;
   forecast30d: number;
   dailyDemandAvg: number;
-  confidenceLevel: ConfidenceLevel;
-  errorMetricName: ErrorMetricName;
+  baselineDailyDemand: number;
+  activeUpliftPercentage: number;
+  signalTitle: string | null;
+  signalExplanation: string | null;
+  confidenceLevel: "low" | "medium" | "high";
+  errorMetricName: null;
   errorMetricValue: number | null;
   historyDaysUsed: number;
 };
@@ -80,6 +90,7 @@ export function prepareDailyDemandHistory({
   return medicines.map((medicine) => ({
     medicineId: medicine.id,
     medicineName: medicine.name,
+    demandCategory: medicine.demand_category,
     dailyDemand: dateSeries.map((date) => ({
       date,
       quantity: salesByMedicineAndDate.get(`${medicine.id}:${date}`) ?? 0,
@@ -100,11 +111,20 @@ export async function generateForecastsForOrganization({
   historyStart.setUTCDate(historyStart.getUTCDate() - historyDays + 1);
   historyStart.setUTCHours(0, 0, 0, 0);
 
-  const [{ data: medicines, error: medicinesError }, { data: salesRecords, error: salesError }] =
+  const [
+    { data: organization, error: organizationError },
+    { data: medicines, error: medicinesError },
+    { data: salesRecords, error: salesError },
+  ] =
     await Promise.all([
       supabase
+        .from("organizations")
+        .select("city, state, country")
+        .eq("id", organizationId)
+        .maybeSingle(),
+      supabase
         .from("medicines")
-        .select("id, name")
+        .select("id, name, demand_category")
         .eq("organization_id", organizationId)
         .order("name", { ascending: true }),
       supabase
@@ -115,36 +135,86 @@ export async function generateForecastsForOrganization({
         .order("sold_at", { ascending: true }),
     ]);
 
-  if (medicinesError || salesError) {
+  let medicineRows = (medicines ?? []) as MedicineRecord[];
+  let medicineError = medicinesError;
+
+  if (isMissingColumnError(medicinesError, "demand_category")) {
+    const fallbackMedicinesQuery = await supabase
+      .from("medicines")
+      .select("id, name")
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true });
+
+    medicineRows = ((fallbackMedicinesQuery.data ?? []) as Array<{ id: string; name: string }>).map(
+      (medicine) => ({
+        ...medicine,
+        demand_category: "general",
+      }),
+    );
+    medicineError = fallbackMedicinesQuery.error;
+  }
+
+  if (organizationError || medicineError || salesError) {
     return {
       forecastRows: [] as GeneratedForecastRow[],
-      preparationError: medicinesError ?? salesError,
+      preparationError: organizationError ?? medicineError ?? salesError,
     };
   }
 
+  const localWeather = await getLocalWeatherSnapshot(organization ?? undefined);
   const preparedDemandHistory = prepareDailyDemandHistory({
-    medicines: (medicines ?? []) as MedicineRecord[],
+    medicines: medicineRows.map((medicine) => ({
+      ...medicine,
+      demand_category: medicine.demand_category ?? "general",
+    })),
     salesRecords: (salesRecords ?? []) as SalesRecord[],
     historyDays,
   });
+  const activeSignalsByCategory = new Map(
+    getLocalDemandSignals({
+      location: organization ?? undefined,
+      weather: localWeather,
+      availableCategories: medicineRows
+        .map((medicine) => medicine.demand_category ?? "general")
+        .filter(Boolean),
+    }).map((signal) => [signal.category, signal]),
+  );
 
   const forecastRows = preparedDemandHistory.map((entry) => {
-    const forecast = generateDemandForecast({
-      dailyHistory: entry.dailyDemand.map((point) => point.quantity),
-    });
+    const recentDailyHistory = entry.dailyDemand.slice(-30);
+    const recentSales30d = recentDailyHistory.reduce((sum, point) => sum + point.quantity, 0);
+    const baselineDailyDemand = Number((recentSales30d / 30).toFixed(2));
+    const activeDays = recentDailyHistory.filter((point) => point.quantity > 0).length;
+    const activeSignal =
+      entry.demandCategory && isDemandCategory(entry.demandCategory)
+        ? activeSignalsByCategory.get(entry.demandCategory) ?? null
+        : null;
+    const activeUpliftPercentage = activeSignal?.upliftPercentage ?? 0;
+    const adjustedDailyDemand = Number(
+      (baselineDailyDemand * (1 + activeUpliftPercentage / 100)).toFixed(2),
+    );
+    const confidenceLevel =
+      activeDays >= 15 ? "high" : activeDays >= 5 ? "medium" : "low";
 
     return {
       organizationId,
       medicineId: entry.medicineId,
       medicineName: entry.medicineName,
-      modelName: forecast.modelName,
-      forecast7d: forecast.forecast7d,
-      forecast30d: forecast.forecast30d,
-      dailyDemandAvg: forecast.dailyDemandAvg,
-      confidenceLevel: forecast.confidenceLevel,
-      errorMetricName: forecast.errorMetricName,
-      errorMetricValue: forecast.errorMetricValue,
-      historyDaysUsed: forecast.historyDaysUsed,
+      demandCategory: entry.demandCategory,
+      modelName: "signal_adjusted_daily_v1",
+      forecast7d: Number((adjustedDailyDemand * 7).toFixed(2)),
+      forecast30d: Number((adjustedDailyDemand * 30).toFixed(2)),
+      dailyDemandAvg: adjustedDailyDemand,
+      baselineDailyDemand,
+      activeUpliftPercentage,
+      signalTitle: activeSignal?.title ?? null,
+      signalExplanation:
+        activeSignal?.explanation ??
+        "No active local demand signal is changing this forecast right now.",
+      confidenceLevel,
+      errorMetricName: null,
+      errorMetricValue: null,
+      historyDaysUsed: 30,
     };
   });
 
@@ -163,6 +233,10 @@ export async function generateForecastsForOrganization({
       forecast_7d: row.forecast7d,
       forecast_30d: row.forecast30d,
       daily_demand_avg: row.dailyDemandAvg,
+      baseline_daily_demand: row.baselineDailyDemand,
+      active_uplift_percentage: row.activeUpliftPercentage,
+      demand_signal_title: row.signalTitle,
+      signal_explanation: row.signalExplanation,
       confidence_level: row.confidenceLevel,
       error_metric_name: row.errorMetricName,
       error_metric_value: row.errorMetricValue,

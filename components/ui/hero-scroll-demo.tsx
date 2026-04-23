@@ -9,17 +9,19 @@ export function HeroScrollDemo() {
       <ContainerScroll
         titleComponent={
           <>
-            <h1 className="text-4xl font-semibold text-black dark:text-white">
-              Unleash the power of <br />
-              <span className="text-4xl md:text-[6rem] font-bold mt-1 leading-none">
-                PharmaFlow
-              </span>
+            <h1 className="text-3xl font-semibold leading-tight text-slate-800 sm:text-4xl">
+              Unleash the power of
             </h1>
+            <span
+              className="mt-2 block bg-gradient-to-r from-slate-950 via-slate-400 to-slate-800 bg-clip-text text-5xl font-black leading-none tracking-tight text-transparent md:text-[6rem]"
+            >
+              PharmaFlow
+            </span>
           </>
         }
       >
         <Image
-          src="https://images.unsplash.com/photo-1585435557343-3b092031a831?q=80&w=2000&auto=format&fit=crop"
+          src="/images/hero-tablet-pharma.png"
           alt="hero"
           height={720}
           width={1400}

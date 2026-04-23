@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, LineChart, SearchCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, LineChart, SearchCheck, FlaskConical } from "lucide-react";
 import DotPattern from "@/components/ui/dot-pattern-1";
 import { Hero } from "@/components/ui/animated-hero";
 import { UpgradeBanner } from "@/components/ui/upgrade-banner";
 import { HeroScrollDemo } from "@/components/ui/hero-scroll-demo";
+import { CircularRevealHeading } from "@/components/ui/circular-reveal-heading";
+
 
 function ProofCard({
   value,
@@ -176,31 +179,62 @@ function ProductGlimpse() {
 
 export function PharmaFlowLandingPage() {
   const router = useRouter();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#f6f7f5] text-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-[#f6f7f5]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-950">
-              PF
+      {/* ── FLOATING GLASSMORPHIC NAVBAR ── */}
+      <header className="fixed top-0 left-0 right-0 z-50 px-4 pt-4 sm:px-6 lg:px-8">
+        <div
+          className={`mx-auto flex max-w-5xl items-center justify-between rounded-2xl px-4 py-3 transition-all duration-500 ${
+            scrolled
+              ? "bg-[#111111]/30 backdrop-blur-3xl saturate-150 shadow-[0_8px_40px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.1)] ring-1 ring-white/10"
+              : "bg-[#111111]/20 backdrop-blur-2xl saturate-150 ring-1 ring-white/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
+          }`}
+        >
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-b from-slate-100 via-slate-200 to-slate-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),0_1px_2px_rgba(0,0,0,0.1)] border border-slate-400/30">
+              <FlaskConical className="h-4 w-4 text-slate-800" />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-950">PharmaFlow</p>
-              <p className="text-xs text-slate-500">Pharmacy operations system</p>
-            </div>
+            <span className="bg-gradient-to-b from-slate-950 to-slate-700 bg-clip-text text-[14px] font-bold tracking-tight text-transparent">
+              PharmaFlow
+            </span>
           </Link>
 
+          {/* Centre nav links */}
+          <nav className="hidden items-center gap-0.5 md:flex">
+            {[
+              { label: "Home", href: "/" },
+              { label: "Features", href: "#capabilities" },
+            ].map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="rounded-full px-3.5 py-1.5 text-sm font-bold text-slate-800 transition-colors hover:bg-black/5 hover:text-black"
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* Right CTA */}
           <div className="flex items-center gap-3">
             <Link
-              href="#product-glimpse"
-              className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
+              href="/sign-in"
+              className="hidden text-sm font-semibold text-slate-600 transition hover:text-slate-950 sm:block"
             >
-              View product
+              Sign in
             </Link>
             <Link
               href="/sign-in"
-              className="inline-flex rounded-full bg-slate-950 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-full bg-gradient-to-b from-slate-50 via-slate-200 to-slate-300 px-4 py-2 text-sm font-bold text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.1)] transition hover:from-white hover:to-slate-200 active:scale-95 border border-slate-400/40"
             >
               Get started
             </Link>
@@ -208,7 +242,7 @@ export function PharmaFlowLandingPage() {
         </div>
       </header>
 
-      <div className="space-y-6 px-3 py-6 sm:px-4 lg:px-6 lg:py-8">
+      <div className="space-y-6 px-3 pt-24 pb-6 sm:px-4 lg:px-6 lg:pb-8">
         <LayerShell>
           <section className="bg-[#f6f7f5]/55">
             <div className="mx-auto max-w-6xl px-5 py-12 sm:px-6 lg:px-8 lg:py-20">
@@ -234,32 +268,57 @@ export function PharmaFlowLandingPage() {
             </div>
           </section>
 
-          <section id="how-it-works" className="bg-[#f6f7f5]/45">
-            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
-              <div className="mx-auto max-w-2xl text-center">
+          <section id="capabilities" className="bg-[#f6f7f5]/45">
+            <div className="mx-auto max-w-6xl px-5 py-24 sm:px-6 lg:px-8">
+              <div className="mx-auto max-w-2xl text-center mb-20">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  How it works
+                  Capabilities & Workflow
                 </p>
                 <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                  One workflow. Three steps.
+                  One workflow. Total control.
                 </h2>
+                <p className="mt-4 text-slate-600">
+                  Hover over the segments to explore how PharmaFlow unifies stock management, risk detection, and reordering.
+                </p>
               </div>
 
-              <div className="mt-10 grid gap-4 lg:grid-cols-3">
-                <StepCard
-                  step="01"
-                  title="Import stock"
-                  line="Upload inventory once and keep batch data clean."
-                />
-                <StepCard
-                  step="02"
-                  title="See risk"
-                  line="Catch low stock and ageing batches before they hurt service."
-                />
-                <StepCard
-                  step="03"
-                  title="Act fast"
-                  line="Turn the signal into a clear reorder decision."
+              <div className="flex justify-center">
+                <CircularRevealHeading
+                  size="md"
+                  centerText={
+                    <div className="flex flex-col items-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-slate-200 bg-white text-xl font-bold text-slate-950 shadow-sm">
+                        PF
+                      </div>
+                      <p className="mt-4 text-sm font-semibold text-slate-950">PharmaFlow</p>
+                    </div>
+                  }
+                  items={[
+                    {
+                      text: "Import Stock",
+                      image: "https://images.unsplash.com/photo-1512678080530-7760d81faba6?auto=format&fit=crop&q=80&w=800"
+                    },
+                    {
+                      text: "See Risk",
+                      image: "https://images.unsplash.com/photo-1587854680352-936b22b91030?auto=format&fit=crop&q=80&w=800"
+                    },
+                    {
+                      text: "Act Fast",
+                      image: "https://images.unsplash.com/photo-1576602976047-174e57a47881?auto=format&fit=crop&q=80&w=800"
+                    },
+                    {
+                      text: "Stockout Risk",
+                      image: "https://images.unsplash.com/photo-1584017947282-2c836a928271?auto=format&fit=crop&q=80&w=800"
+                    },
+                    {
+                      text: "Expiry Risk",
+                      image: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=800"
+                    },
+                    {
+                      text: "Reorder Logic",
+                      image: "https://images.unsplash.com/photo-1563213126-a4273aed9016?auto=format&fit=crop&q=80&w=800"
+                    }
+                  ]}
                 />
               </div>
             </div>
@@ -267,37 +326,6 @@ export function PharmaFlowLandingPage() {
         </LayerShell>
 
         <LayerShell>
-          <section className="border-b border-slate-200/70 bg-white">
-            <div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
-              <div className="mx-auto max-w-2xl text-center">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  Core capabilities
-                </p>
-                <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                  Focus on what needs action.
-                </h2>
-              </div>
-
-              <div className="mt-10 grid gap-4 lg:grid-cols-3">
-                <CoreCard
-                  icon={AlertTriangle}
-                  title="Stockout Risk"
-                  line="Know what will run short before it becomes urgent."
-                />
-                <CoreCard
-                  icon={LineChart}
-                  title="Expiry Risk"
-                  line="See which batches need attention before value is lost."
-                />
-                <CoreCard
-                  icon={SearchCheck}
-                  title="Reorder Suggestions"
-                  line="Use clear stock-cover logic to decide what to buy next."
-                />
-              </div>
-            </div>
-          </section>
-
           <section id="product-glimpse" className="bg-[#f6f7f5]/45">
             <HeroScrollDemo />
           </section>

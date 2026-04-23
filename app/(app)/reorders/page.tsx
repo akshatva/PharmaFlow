@@ -12,11 +12,13 @@ import {
   type ProductForecastRecord,
   type ProductForecastRow,
 } from "@/lib/forecasting/product";
+import { getLocalDemandSignals } from "@/services/insights";
 import {
-  REORDER_TRANSPARENCY_COPY,
+  isDemandCategory,
   getRulesBasedReorderDecision,
 } from "@/services/inventory";
-import { isMissingRelationError } from "@/lib/supabase/errors";
+import { getLocalWeatherSnapshot } from "@/services/weather";
+import { isMissingColumnError, isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ReorderItemRecord = {
@@ -28,9 +30,11 @@ type ReorderItemRecord = {
   medicines:
     | {
         name: string;
+        demand_category: string | null;
       }
     | {
         name: string;
+        demand_category: string | null;
       }[]
     | null;
 };
@@ -75,11 +79,16 @@ type ReorderRow = {
   recommendation: "Reorder Now" | "Reorder Soon" | "Monitor" | "Avoid Reorder";
   priority: "Urgent" | "High" | "Medium" | "Low";
   suggestedQuantity: number;
+  baseSuggestedQuantity: number | null;
   forecast30d: number | null;
   forecastAvailable: boolean;
   usedForecast: boolean;
   explainabilityNote: string;
   confidenceNote: string;
+  demandSignalAdjusted: boolean;
+  appliedDemandSignalUpliftPercentage: number | null;
+  demandSignalTitle: string | null;
+  demandSignalExplanation: string | null;
   suggestedSupplierId: string | null;
   suggestedSupplierName: string | null;
   supplierSuggestionNote: string | null;
@@ -117,13 +126,23 @@ function formatDaysOfStockLeft(value: number | null) {
 function getSmartOrderingSuggestion({
   currentStock,
   recentSales,
+  demandSignal,
 }: {
   currentStock: number;
   recentSales: number;
+  demandSignal?: ReturnType<typeof getLocalDemandSignals>[number] | null;
 }) {
   const decision = getRulesBasedReorderDecision({
     currentStock,
     recentSales30d: recentSales,
+    demandSignal: demandSignal
+      ? {
+          title: demandSignal.title,
+          upliftPercentage: demandSignal.upliftPercentage,
+          explanation: demandSignal.explanation,
+          category: demandSignal.category,
+        }
+      : null,
   });
 
   return {
@@ -131,14 +150,21 @@ function getSmartOrderingSuggestion({
     recommendation: decision.recommendation,
     priority: decision.priority,
     suggestedQuantity: decision.recommendedReorderQuantity ?? 0,
+    baseSuggestedQuantity: decision.baseRecommendedReorderQuantity,
     explainabilityNote:
-      decision.availability === "available"
-        ? "No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula."
+      decision.availability === "available" && decision.demandSignalAdjusted
+        ? `No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula with a ${decision.appliedDemandSignalUpliftPercentage}% local demand uplift.`
+        : decision.availability === "available"
+          ? "No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula."
         : "No forecast available or confidence is low, and there is not enough recent sales data to calculate a reliable fallback reorder quantity.",
     confidenceNote:
       decision.availability === "available"
-        ? REORDER_TRANSPARENCY_COPY
+        ? decision.confidenceNote
         : decision.confidenceNote,
+    demandSignalAdjusted: decision.demandSignalAdjusted,
+    appliedDemandSignalUpliftPercentage: decision.appliedDemandSignalUpliftPercentage,
+    demandSignalTitle: decision.demandSignalTitle,
+    demandSignalExplanation: decision.demandSignalExplanation,
   };
 }
 
@@ -192,6 +218,7 @@ export default async function ReordersPage() {
   recentSalesCutoff.setDate(recentSalesCutoff.getDate() - 30);
 
   const [
+    organizationQuery,
     { data: reorderItems, error: reorderError },
     { data: batchRecords, error: batchError },
     { data: salesRecords, error: salesError },
@@ -201,8 +228,13 @@ export default async function ReordersPage() {
     { data: forecastResults, error: forecastError },
   ] = await Promise.all([
     supabase
+      .from("organizations")
+      .select("city, state, country")
+      .eq("id", membership.organization_id)
+      .maybeSingle(),
+    supabase
       .from("reorder_items")
-      .select("id, medicine_id, reason, status, created_at, medicines(name)")
+      .select("id, medicine_id, reason, status, created_at, medicines(name, demand_category)")
       .eq("organization_id", membership.organization_id)
       .order("created_at", { ascending: false }),
     supabase
@@ -241,8 +273,19 @@ export default async function ReordersPage() {
     suppliersError ??
     purchaseOrdersError ??
     purchaseOrderItemsError;
+  let organization = organizationQuery.data;
+  let organizationError = organizationQuery.error;
 
-  if (baseDataError) {
+  if (
+    isMissingColumnError(organizationQuery.error, "city") ||
+    isMissingColumnError(organizationQuery.error, "state") ||
+    isMissingColumnError(organizationQuery.error, "country")
+  ) {
+    organization = null;
+    organizationError = null;
+  }
+
+  if (baseDataError ?? organizationError) {
     if (isMissingRelationError(reorderError, "reorder_items")) {
       return (
         <div className="space-y-6">
@@ -293,7 +336,7 @@ export default async function ReordersPage() {
 
     throw new Error(
       process.env.NODE_ENV === "development"
-        ? `Unable to load reorders: ${baseDataError.message}`
+        ? `Unable to load reorders: ${(baseDataError ?? organizationError)!.message}`
         : "Unable to load reorders.",
     );
   }
@@ -375,12 +418,30 @@ export default async function ReordersPage() {
   });
 
   const forecastRowsByMedicine = new Map(forecastRows.map((row) => [row.medicineId, row]));
+  const localWeather = await getLocalWeatherSnapshot(organization ?? undefined);
+  const localDemandSignals = getLocalDemandSignals({
+    location: organization ?? undefined,
+    weather: localWeather,
+    availableCategories: ((reorderItems ?? []) as ReorderItemRecord[])
+      .map((item) => {
+        const medicine = Array.isArray(item.medicines) ? item.medicines[0] : item.medicines;
+        return medicine?.demand_category ?? "";
+      })
+      .filter(Boolean),
+  });
+  const activeSignalsByCategory = new Map(
+    localDemandSignals.map((signal) => [signal.category, signal]),
+  );
 
   const rows: ReorderRow[] = ((reorderItems ?? []) as ReorderItemRecord[])
     .map((item) => {
       const medicine = Array.isArray(item.medicines) ? item.medicines[0] : item.medicines;
       const currentStock = stockByMedicine.get(item.medicine_id) ?? 0;
       const recentSales = recentSalesByMedicine.get(item.medicine_id) ?? 0;
+      const demandSignal =
+        medicine?.demand_category && isDemandCategory(medicine.demand_category)
+          ? activeSignalsByCategory.get(medicine.demand_category) ?? null
+          : null;
       const supplierSuggestion = latestSupplierByMedicineId.get(item.medicine_id);
       const supplierSuggestionNote = supplierSuggestion
         ? `Most recently used supplier for this medicine.`
@@ -388,6 +449,7 @@ export default async function ReordersPage() {
       const fallbackDecision = getSmartOrderingSuggestion({
         currentStock,
         recentSales,
+        demandSignal,
       });
       const forecastRow = forecastRowsByMedicine.get(item.medicine_id) ?? null;
       const decision = getForecastAwareReorderDecision({
@@ -408,11 +470,16 @@ export default async function ReordersPage() {
         recommendation: decision.recommendation,
         priority: decision.priority,
         suggestedQuantity: decision.suggestedQuantity,
+        baseSuggestedQuantity: fallbackDecision.baseSuggestedQuantity,
         forecast30d: forecastRow?.forecast30d ?? null,
         forecastAvailable: forecastRow?.forecastAvailable ?? false,
         usedForecast: decision.usedForecast,
         explainabilityNote: decision.explainabilityNote,
         confidenceNote: decision.confidenceNote,
+        demandSignalAdjusted: fallbackDecision.demandSignalAdjusted,
+        appliedDemandSignalUpliftPercentage: fallbackDecision.appliedDemandSignalUpliftPercentage,
+        demandSignalTitle: fallbackDecision.demandSignalTitle,
+        demandSignalExplanation: fallbackDecision.demandSignalExplanation,
         suggestedSupplierId: supplierSuggestion?.supplierId ?? null,
         suggestedSupplierName: supplierSuggestion?.supplierName ?? null,
         supplierSuggestionNote,
@@ -535,6 +602,11 @@ export default async function ReordersPage() {
                     <span className="app-badge border-slate-200 bg-white text-slate-700">
                       {row.usedForecast ? "Forecast guided" : "Fallback"}
                     </span>
+                    {row.demandSignalAdjusted ? (
+                      <span className="app-badge border-blue-200 bg-blue-50 text-blue-700">
+                        +{row.appliedDemandSignalUpliftPercentage}% local demand
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -559,6 +631,9 @@ export default async function ReordersPage() {
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
                     <p className="text-sm font-medium text-slate-900">{row.recommendation}</p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{row.explainabilityNote}</p>
+                    {row.demandSignalAdjusted && row.demandSignalExplanation ? (
+                      <p className="mt-2 text-xs leading-5 text-blue-700">{row.demandSignalExplanation}</p>
+                    ) : null}
                     <p className="mt-2 text-xs leading-5 text-slate-500">{row.confidenceNote}</p>
                     <p className="mt-2 text-xs leading-5 text-slate-500">Original trigger: {row.originalReason}</p>
                   </div>
@@ -569,6 +644,13 @@ export default async function ReordersPage() {
                       <p className="mt-1 text-sm font-medium text-slate-900">
                         {row.suggestedQuantity > 0 ? row.suggestedQuantity : "No draft suggested"}
                       </p>
+                      {row.demandSignalAdjusted &&
+                      row.baseSuggestedQuantity !== null &&
+                      row.suggestedQuantity > 0 ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Base {row.baseSuggestedQuantity} → Final {row.suggestedQuantity}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                       <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Model used</p>
@@ -627,7 +709,16 @@ export default async function ReordersPage() {
                       <td className="border-b border-slate-100 px-3 py-4">
                         <div className="space-y-1">
                           <p className="font-medium text-slate-900">{row.medicineName}</p>
+                          {row.demandSignalAdjusted ? (
+                            <p className="text-xs font-medium text-blue-700">
+                              Adjusted +{row.appliedDemandSignalUpliftPercentage}% for{" "}
+                              {row.demandSignalTitle?.toLowerCase()}
+                            </p>
+                          ) : null}
                           <p className="text-xs text-slate-500">{row.explainabilityNote}</p>
+                          {row.demandSignalAdjusted && row.demandSignalExplanation ? (
+                            <p className="text-xs text-slate-500">{row.demandSignalExplanation}</p>
+                          ) : null}
                           <p className="text-xs text-slate-500">{row.confidenceNote}</p>
                           <p className="text-xs text-slate-500">Model: {row.modelName ?? "Fallback only"}</p>
                         </div>
@@ -667,6 +758,13 @@ export default async function ReordersPage() {
                               ? `${row.suggestedQuantity} units suggested`
                               : "No draft suggested"}
                           </p>
+                          {row.demandSignalAdjusted &&
+                          row.baseSuggestedQuantity !== null &&
+                          row.suggestedQuantity > 0 ? (
+                            <p className="text-xs text-slate-500">
+                              Base {row.baseSuggestedQuantity} → Final {row.suggestedQuantity}
+                            </p>
+                          ) : null}
                           <p className="text-xs text-slate-500">
                             {row.usedForecast ? "Forecast guided" : "Fallback logic"}
                           </p>

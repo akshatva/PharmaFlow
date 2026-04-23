@@ -11,10 +11,10 @@ const config: Config = {
       colors: {
         border: "#e2e8f0",
         "border-strong": "#cbd5e1",
-        background: "#f8fafb",
+        background: "#c3d8e3ff",
         surface: "#ffffff",
         foreground: "#0f172a",
-        muted: "#64748b",
+        muted: "#8ba5caff",
         accent: "#2563eb",
         "accent-foreground": "#eff6ff",
         sidebar: {

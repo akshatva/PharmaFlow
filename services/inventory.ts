@@ -58,15 +58,56 @@ export const REORDER_SAFETY_BUFFER_UNITS = 5;
 export const REORDER_TRANSPARENCY_COPY =
   "Based on last 30 days sales, 14 days target cover, and a 5-unit safety buffer.";
 
+export const demandCategoryOptions = [
+  "fever_flu",
+  "respiratory",
+  "hydration",
+  "gastro",
+  "allergy",
+  "pain_relief",
+  "general",
+] as const;
+
+export type DemandCategory = (typeof demandCategoryOptions)[number];
+
+export type ReorderDemandSignalAdjustment = {
+  title: string;
+  upliftPercentage: number;
+  explanation: string;
+  category: DemandCategory;
+};
+
+export function isDemandCategory(value: string): value is DemandCategory {
+  return demandCategoryOptions.includes(value as DemandCategory);
+}
+
+export function formatDemandCategoryLabel(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
+
+  return value
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
 export type RulesBasedReorderDecision = {
   averageDailySales30d: number | null;
+  baseAverageDailySales30d: number | null;
+  adjustedAverageDailySales30d: number | null;
   daysOfStockLeft: number | null;
   recommendation: ForecastRecommendation;
   priority: ForecastPriority;
   recommendedReorderQuantity: number | null;
+  baseRecommendedReorderQuantity: number | null;
   availability: "available" | "insufficient_recent_sales_data";
   explainabilityNote: string;
   confidenceNote: string;
+  demandSignalAdjusted: boolean;
+  appliedDemandSignalUpliftPercentage: number | null;
+  demandSignalTitle: string | null;
+  demandSignalExplanation: string | null;
 };
 
 export function normalizeMedicineDisplayName(value: string) {
@@ -332,27 +373,58 @@ function roundValue(value: number) {
 export function getRulesBasedReorderDecision({
   currentStock,
   recentSales30d,
+  demandSignal,
 }: {
   currentStock: number;
   recentSales30d: number;
+  demandSignal?: ReorderDemandSignalAdjustment | null;
 }): RulesBasedReorderDecision {
+  const baseAverageDailySales30d =
+    recentSales30d > 0 ? recentSales30d / REORDER_SALES_WINDOW_DAYS : null;
+  const demandSignalAdjusted =
+    Boolean(demandSignal) && baseAverageDailySales30d !== null;
+  const appliedDemandSignalUpliftPercentage = demandSignalAdjusted
+    ? demandSignal!.upliftPercentage
+    : null;
+  const adjustedAverageDailySales30d =
+    baseAverageDailySales30d === null
+      ? null
+      : demandSignalAdjusted
+        ? baseAverageDailySales30d * (1 + demandSignal!.upliftPercentage / 100)
+        : baseAverageDailySales30d;
+
   if (recentSales30d <= 0) {
     return {
       averageDailySales30d: null,
+      baseAverageDailySales30d: null,
+      adjustedAverageDailySales30d: null,
       daysOfStockLeft: null,
-      recommendation: "Avoid Reorder",
+      recommendation: "Monitor",
       priority: "Low",
       recommendedReorderQuantity: null,
+      baseRecommendedReorderQuantity: null,
       availability: "insufficient_recent_sales_data",
       explainabilityNote: "Not enough recent sales data to calculate a reliable reorder quantity.",
       confidenceNote:
         "No sales were recorded in the last 30 days, so PharmaFlow is not showing a precise reorder number.",
+      demandSignalAdjusted: false,
+      appliedDemandSignalUpliftPercentage: null,
+      demandSignalTitle: null,
+      demandSignalExplanation: null,
     };
   }
 
-  const averageDailySales30d = recentSales30d / REORDER_SALES_WINDOW_DAYS;
+  const averageDailySales30d = adjustedAverageDailySales30d!;
   const daysOfStockLeft =
     averageDailySales30d > 0 ? roundValue(currentStock / averageDailySales30d) : null;
+  const baseRecommendedReorderQuantity = Math.max(
+    0,
+    Math.ceil(
+      baseAverageDailySales30d! * REORDER_TARGET_DAYS_COVER +
+        REORDER_SAFETY_BUFFER_UNITS -
+        currentStock,
+    ),
+  );
   const recommendedReorderQuantity = Math.max(
     0,
     Math.ceil(
@@ -365,40 +437,70 @@ export function getRulesBasedReorderDecision({
   if (recommendedReorderQuantity === 0) {
     return {
       averageDailySales30d: roundValue(averageDailySales30d),
+      baseAverageDailySales30d: roundValue(baseAverageDailySales30d!),
+      adjustedAverageDailySales30d: roundValue(averageDailySales30d),
       daysOfStockLeft,
       recommendation: "Monitor",
       priority: "Low",
       recommendedReorderQuantity: 0,
+      baseRecommendedReorderQuantity,
       availability: "available",
-      explainabilityNote:
-        "Current stock already covers the 14-day target window plus the 5-unit safety buffer.",
-      confidenceNote: REORDER_TRANSPARENCY_COPY,
+      explainabilityNote: demandSignalAdjusted
+        ? `Adjusted for ${demandSignal!.title.toLowerCase()}. Even after a ${demandSignal!.upliftPercentage}% demand uplift, current stock still covers the target window.`
+        : "Current stock already covers the 14-day target window plus the 5-unit safety buffer.",
+      confidenceNote: demandSignalAdjusted
+        ? `${REORDER_TRANSPARENCY_COPY} Seasonal demand signal applied as a planning adjustment, not a precise forecast.`
+        : REORDER_TRANSPARENCY_COPY,
+      demandSignalAdjusted,
+      appliedDemandSignalUpliftPercentage,
+      demandSignalTitle: demandSignalAdjusted ? demandSignal!.title : null,
+      demandSignalExplanation: demandSignalAdjusted ? demandSignal!.explanation : null,
     };
   }
 
   if (daysOfStockLeft !== null && daysOfStockLeft <= 7) {
     return {
       averageDailySales30d: roundValue(averageDailySales30d),
+      baseAverageDailySales30d: roundValue(baseAverageDailySales30d!),
+      adjustedAverageDailySales30d: roundValue(averageDailySales30d),
       daysOfStockLeft,
       recommendation: "Reorder Now",
       priority: "Urgent",
       recommendedReorderQuantity,
+      baseRecommendedReorderQuantity,
       availability: "available",
-      explainabilityNote:
-        "Current stock is below the 14-day target window and close to running short at the recent sales pace.",
-      confidenceNote: REORDER_TRANSPARENCY_COPY,
+      explainabilityNote: demandSignalAdjusted
+        ? `Adjusted for ${demandSignal!.title.toLowerCase()}. The seasonal uplift increases the near-term reorder quantity.`
+        : "Current stock is below the 14-day target window and close to running short at the recent sales pace.",
+      confidenceNote: demandSignalAdjusted
+        ? `${REORDER_TRANSPARENCY_COPY} Seasonal demand signal applied as a planning adjustment, not a precise forecast.`
+        : REORDER_TRANSPARENCY_COPY,
+      demandSignalAdjusted,
+      appliedDemandSignalUpliftPercentage,
+      demandSignalTitle: demandSignalAdjusted ? demandSignal!.title : null,
+      demandSignalExplanation: demandSignalAdjusted ? demandSignal!.explanation : null,
     };
   }
 
   return {
     averageDailySales30d: roundValue(averageDailySales30d),
+    baseAverageDailySales30d: roundValue(baseAverageDailySales30d!),
+    adjustedAverageDailySales30d: roundValue(averageDailySales30d),
     daysOfStockLeft,
     recommendation: "Reorder Soon",
     priority: "High",
     recommendedReorderQuantity,
+    baseRecommendedReorderQuantity,
     availability: "available",
-    explainabilityNote:
-      "Current stock is below the 14-day target window after applying the 5-unit safety buffer.",
-    confidenceNote: REORDER_TRANSPARENCY_COPY,
+    explainabilityNote: demandSignalAdjusted
+      ? `Adjusted for ${demandSignal!.title.toLowerCase()}. PharmaFlow increased the reorder quantity using the active seasonal demand uplift.`
+      : "Current stock is below the 14-day target window after applying the 5-unit safety buffer.",
+    confidenceNote: demandSignalAdjusted
+      ? `${REORDER_TRANSPARENCY_COPY} Seasonal demand signal applied as a planning adjustment, not a precise forecast.`
+      : REORDER_TRANSPARENCY_COPY,
+    demandSignalAdjusted,
+    appliedDemandSignalUpliftPercentage,
+    demandSignalTitle: demandSignalAdjusted ? demandSignal!.title : null,
+    demandSignalExplanation: demandSignalAdjusted ? demandSignal!.explanation : null,
   };
 }

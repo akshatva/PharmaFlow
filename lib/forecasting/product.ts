@@ -10,6 +10,10 @@ export type ProductForecastRecord = {
   forecast_7d: number;
   forecast_30d: number;
   daily_demand_avg: number;
+  baseline_daily_demand?: number | null;
+  active_uplift_percentage?: number | null;
+  demand_signal_title?: string | null;
+  signal_explanation?: string | null;
   confidence_level: ForecastConfidenceLevel | null;
   error_metric_name: string | null;
   error_metric_value: number | null;

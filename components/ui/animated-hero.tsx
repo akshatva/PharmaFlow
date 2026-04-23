@@ -72,15 +72,12 @@ function Hero() {
             </h1>
 
             <p className="mx-auto max-w-2xl text-center text-lg leading-8 tracking-tight text-slate-600 md:text-xl">
-              Managing a small business today is already tough. Avoid further complications
-              by ditching outdated, tedious trade methods.
+              Ditch manual tracking for intelligent, batch-aware clinical inventory management.
+              Prevent stockouts and eliminate expiry risk with precise pharmacy operations.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" className="gap-3 rounded-xl border-slate-200 px-6" variant="outline">
-              Jump on a call <PhoneCall className="h-4 w-4" />
-            </Button>
             <Button size="lg" className="gap-3 rounded-xl px-6" asChild>
               <Link href="/sign-in">
                 Sign up here <MoveRight className="h-4 w-4" />

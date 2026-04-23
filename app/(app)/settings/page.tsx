@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { SectionIntro } from "@/components/layout/section-intro";
 import { SetupNotice } from "@/components/layout/setup-notice";
 import { AlertsEmailSettings } from "@/components/settings/alerts-email-settings";
+import { PharmacyLocationSettings } from "@/components/settings/pharmacy-location-settings";
+import { isMissingColumnError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SettingsPage() {
@@ -15,11 +17,53 @@ export default async function SettingsPage() {
     redirect("/sign-in");
   }
 
+  const { data: membership } = await supabase
+    .from("organization_members")
+    .select("organization_id")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!membership) {
+    redirect("/onboarding");
+  }
+
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("email, alerts_email_enabled, phone_number, whatsapp_enabled")
     .eq("id", user.id)
     .maybeSingle();
+
+  const organizationQuery = await supabase
+    .from("organizations")
+    .select("city, state, country, pincode")
+    .eq("id", membership.organization_id)
+    .maybeSingle();
+
+  let organizationData = organizationQuery.data;
+  let organizationError = organizationQuery.error;
+
+  if (isMissingColumnError(organizationError, "pincode")) {
+    const fallbackOrganizationQuery = await supabase
+      .from("organizations")
+      .select("city, state, country")
+      .eq("id", membership.organization_id)
+      .maybeSingle();
+
+    organizationData = fallbackOrganizationQuery.data
+      ? {
+          ...fallbackOrganizationQuery.data,
+          pincode: "",
+        }
+      : null;
+    organizationError = fallbackOrganizationQuery.error;
+  }
+
+  const isLocationSetupMissing =
+    isMissingColumnError(organizationError, "city") ||
+    isMissingColumnError(organizationError, "state") ||
+    isMissingColumnError(organizationError, "country");
 
   if (profileError) {
     if (
@@ -49,20 +93,67 @@ export default async function SettingsPage() {
     );
   }
 
+  if (organizationError && !isLocationSetupMissing) {
+    throw new Error(
+      process.env.NODE_ENV === "development"
+        ? `Unable to load settings: ${organizationError.message}`
+        : "Unable to load settings.",
+    );
+  }
+
   return (
     <div className="space-y-6">
       <SectionIntro
         eyebrow="Workspace"
         title="Settings"
-        description="Manage lightweight notification preferences for your PharmaFlow account."
+        description="Manage pharmacy location and lightweight notification preferences for your PharmaFlow account."
       />
 
-      <AlertsEmailSettings
-        email={profile?.email ?? user.email ?? "your account email"}
-        initialEnabled={profile?.alerts_email_enabled ?? true}
-        initialPhoneNumber={profile?.phone_number ?? ""}
-        initialWhatsAppEnabled={profile?.whatsapp_enabled ?? false}
-      />
+      <section className="space-y-4">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50/80 px-6 py-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Organization
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">Pharmacy Location</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Organization-scoped settings for the pharmacy location used by local demand and
+            weather-aware workflows.
+          </p>
+        </div>
+
+        {isLocationSetupMissing ? (
+          <SetupNotice
+            title="Organization location fields not available yet"
+            description="Add the pharmacy location columns to the `organizations` table, then refresh the app to store city, state, country, and pincode."
+          />
+        ) : (
+          <PharmacyLocationSettings
+            initialCity={organizationData?.city ?? ""}
+            initialState={organizationData?.state ?? ""}
+            initialCountry={organizationData?.country ?? ""}
+            initialPincode={organizationData?.pincode ?? ""}
+          />
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50/80 px-6 py-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Profile
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">Notifications</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Profile-scoped notification preferences for email and WhatsApp delivery.
+          </p>
+        </div>
+
+        <AlertsEmailSettings
+          email={profile?.email ?? user.email ?? "your account email"}
+          initialEnabled={profile?.alerts_email_enabled ?? true}
+          initialPhoneNumber={profile?.phone_number ?? ""}
+          initialWhatsAppEnabled={profile?.whatsapp_enabled ?? false}
+        />
+      </section>
     </div>
   );
 }
