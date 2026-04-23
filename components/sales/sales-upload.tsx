@@ -49,6 +49,10 @@ export function SalesUpload() {
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [skippedEmptyRows, setSkippedEmptyRows] = useState(0);
 
+  function isCsvFile(file: File) {
+    return file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
+  }
+
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -61,6 +65,13 @@ export function SalesUpload() {
     setFileName(file?.name ?? "");
 
     if (!file) {
+      return;
+    }
+
+    if (!isCsvFile(file)) {
+      setParseWarnings([
+        "PDF and image sales import are not available yet in this pass. CSV remains the supported import format.",
+      ]);
       return;
     }
 
@@ -115,23 +126,30 @@ export function SalesUpload() {
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <h3 className="text-lg font-semibold text-slate-950">Sales CSV upload</h3>
+            <h3 className="text-lg font-semibold text-slate-950">Sales import</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Upload sales records for your organization, validate the rows, and import the known medicines into PharmaFlow.
             </p>
             <p className="mt-3 text-sm text-slate-500">
-              Required columns: <code>medicine_name</code>, <code>quantity_sold</code>, <code>sold_at</code>
+              Required columns: <code>medicine_name</code>, <code>quantity_sold</code>, <code>sold_at</code>.
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              Also supports aliases: <code>qty</code>, <code>date</code>, <code>medicine</code>, <code>product_name</code>, etc.
+            </p>
+            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              CSV is the only working import format right now. PDF and image files can be selected,
+              but extraction is not implemented yet in this pass.
             </p>
           </div>
 
           <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.pdf,image/*"
               className="hidden"
               onChange={handleFileChange}
             />
-            Select CSV file
+            Select file
           </label>
         </div>
 
@@ -207,7 +225,7 @@ export function SalesUpload() {
             label={isPending ? "Importing..." : "Import sales"}
           />
           {!fileName ? (
-            <span className="text-sm text-slate-500">Choose a CSV file to begin.</span>
+            <span className="text-sm text-slate-500">Choose a file to begin. CSV is currently required for import.</span>
           ) : !canImport ? (
             <span className="text-sm text-slate-500">Fix validation issues before importing.</span>
           ) : (
@@ -232,35 +250,35 @@ export function SalesUpload() {
         </div>
 
         {previewRows.length ? (
-          <div className="mt-6 overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+          <div className="app-table-shell mt-6 overflow-x-auto">
+            <table className="app-table">
               <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Row</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity Sold</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Sold At</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">SKU</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
+                <tr>
+                  <th>Row</th>
+                  <th>Medicine</th>
+                  <th>Quantity Sold</th>
+                  <th>Sold At</th>
+                  <th>SKU</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {previewRows.map((row) => (
                   <tr key={row.rowNumber} className="align-top">
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-500">{row.rowNumber}</td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                    <td className="text-slate-500">{row.rowNumber}</td>
+                    <td className="text-slate-900">
                       {row.values.medicine_name || "—"}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                    <td className="text-slate-900">
                       {row.values.quantity_sold || "—"}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                    <td className="text-slate-900">
                       {row.values.sold_at || "—"}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-900">
+                    <td className="text-slate-900">
                       {row.values.sku || "—"}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3">
+                    <td>
                       {row.errors.length ? (
                         <div className="space-y-1">
                           {row.errors.map((error) => (

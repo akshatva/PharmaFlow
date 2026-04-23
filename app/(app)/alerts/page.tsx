@@ -78,6 +78,11 @@ function AlertsSection({
                   </div>
                 ) : null}
 
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Reason</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">{renderReason(row)}</p>
+                </div>
+
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                   <ReorderButton
                     medicineId={row.medicineId}
@@ -95,53 +100,57 @@ function AlertsSection({
             ))}
           </div>
 
-          <div className="mt-6 hidden overflow-x-auto lg:block">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
+          <div className="app-table-shell mt-6 hidden overflow-x-auto lg:block">
+            <table className="app-table">
               <thead>
-                <tr className="text-slate-500">
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Batch</th>
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Quantity</th>
+                <tr>
+                  <th>Medicine</th>
+                  <th>Batch</th>
+                  <th>Quantity</th>
                   {showExpiry ? (
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Expiry Date</th>
+                    <th>Expiry Date</th>
                   ) : null}
                   {showDaysLeft ? (
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Days Left</th>
+                    <th>Days Left</th>
                   ) : null}
                   {!showExpiry ? (
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">SKU</th>
+                    <th>SKU</th>
                   ) : null}
-                  <th className="border-b border-slate-200 px-3 py-3 font-medium">Actions</th>
+                  <th>Reason</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-900">
+                    <td className="font-medium text-slate-900">
                       {row.medicineName}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td className="text-slate-700">
                       {row.batchNumber}
                     </td>
-                    <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                    <td className="text-slate-700">
                       {row.quantity}
                     </td>
                     {showExpiry ? (
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      <td className="text-slate-700">
                         {formatAlertDate(row.expiryDate)}
                       </td>
                     ) : null}
                     {showDaysLeft ? (
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      <td className="text-slate-700">
                         {getDaysUntilExpiry(row.expiryDate)}
                       </td>
                     ) : null}
                     {!showExpiry ? (
-                      <td className="border-b border-slate-100 px-3 py-3 text-slate-700">
+                      <td className="text-slate-700">
                         {row.sku || "—"}
                       </td>
                     ) : null}
-                    <td className="border-b border-slate-100 px-3 py-3">
+                    <td className="max-w-[280px] text-slate-600">
+                      {renderReason(row)}
+                    </td>
+                    <td>
                       <div className="flex flex-wrap items-center gap-3">
                         <ReorderButton
                           medicineId={row.medicineId}

@@ -100,6 +100,10 @@ export function InventoryUpload() {
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [skippedEmptyRows, setSkippedEmptyRows] = useState(0);
 
+  function isCsvFile(file: File) {
+    return file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
+  }
+
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -112,6 +116,13 @@ export function InventoryUpload() {
     setFileName(file?.name ?? "");
 
     if (!file) {
+      return;
+    }
+
+    if (!isCsvFile(file)) {
+      setParseWarnings([
+        "PDF and image inventory import are not available yet in this pass. CSV remains the supported import format.",
+      ]);
       return;
     }
 
@@ -184,12 +195,12 @@ export function InventoryUpload() {
       <div className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
-            <p className="app-kicker">CSV-first import</p>
+            <p className="app-kicker">File import</p>
             <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
-              Inventory CSV upload
+              Inventory import
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Upload batch-based inventory data, validate it before import, and keep repeated CSV refreshes predictable for your team.
+              Upload batch-based inventory data, validate it before import, and keep repeated refreshes predictable for your team.
             </p>
             <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
               <div className="app-card-muted px-4 py-3">
@@ -226,6 +237,10 @@ export function InventoryUpload() {
               uploaded values. Quantity is replaced, not added, and batches missing from the file
               are not deleted.
             </div>
+            <div className="app-panel-warning mt-4">
+              CSV is the only working import format right now. PDF and image files can be selected,
+              but extraction is not implemented yet in this pass.
+            </div>
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -239,11 +254,11 @@ export function InventoryUpload() {
             <label className="app-button-subtle inline-flex w-full cursor-pointer sm:w-auto">
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,text/csv,.pdf,image/*"
                 className="hidden"
                 onChange={handleFileChange}
               />
-              Select CSV file
+              Select file
             </label>
           </div>
         </div>
@@ -311,7 +326,7 @@ export function InventoryUpload() {
             label={isPending ? "Importing..." : "Import inventory"}
           />
           {!fileName ? (
-            <span className="text-sm text-slate-500">Choose a CSV file to begin.</span>
+            <span className="text-sm text-slate-500">Choose a file to begin. CSV is currently required for import.</span>
           ) : !canImport ? (
             <span className="text-sm text-slate-500">
               No valid rows available. Fix validation issues before importing.

@@ -18,8 +18,8 @@ export function DashboardFeatures() {
                                     </svg>
                                     <span className="mx-auto block w-fit text-5xl font-semibold text-slate-900 leading-tight">100%</span>
                                 </div>
-                                <h2 className="mt-6 text-2xl font-semibold text-slate-900 tracking-tight">System Transparency</h2>
-                                <p className="mt-2 text-sm text-slate-500">Real-time visibility into every batch and inventory movement.</p>
+                                <h2 className="mt-6 text-2xl font-semibold text-slate-900 tracking-tight">Inventory visibility</h2>
+                                <p className="mt-2 text-sm text-slate-500">Stay close to current stock, batches, and movement history without leaving the operations workflow.</p>
                             </CardContent>
                         </Card>
                         
@@ -29,8 +29,8 @@ export function DashboardFeatures() {
                                     <BarChart3 className="m-auto h-12 w-12 text-blue-600" strokeWidth={1.5} />
                                 </div>
                                 <div className="relative z-10 mt-8 space-y-2">
-                                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Demand Insights</h2>
-                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Analyze sales velocity and identify high-performance pharmaceutical trends.</p>
+                                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Demand signals</h2>
+                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Use seasonal and weather-aware context to understand which categories may need extra attention.</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -41,8 +41,8 @@ export function DashboardFeatures() {
                                     <Shield className="m-auto h-12 w-12 text-emerald-600" strokeWidth={1.5} />
                                 </div>
                                 <div className="relative z-10 mt-8 space-y-2">
-                                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Safe Margins</h2>
-                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Auto-calculated safety stock levels ensuring zero stockout events.</p>
+                                    <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Reorder guidance</h2>
+                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Combine recent sales, forecast coverage, and demand uplift into clearer reorder decisions.</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -54,8 +54,8 @@ export function DashboardFeatures() {
                                         <Database className="m-auto size-5 text-slate-600" strokeWidth={1.5} />
                                     </div>
                                     <div className="space-y-2">
-                                        <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Secure Audit Trails</h2>
-                                        <p className="text-sm text-slate-500 leading-relaxed">Immutable history of every manual adjustment, received order, and batch deletion.</p>
+                                        <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Audit trail</h2>
+                                        <p className="text-sm text-slate-500 leading-relaxed">Track manual stock changes, received orders, and operational corrections with less guesswork.</p>
                                     </div>
                                 </div>
                                 <div className="relative -mb-6 -mr-6 mt-6 h-fit border-l border-t border-slate-100 p-6 bg-slate-50/50 rounded-tl-3xl shadow-sm">
@@ -80,8 +80,8 @@ export function DashboardFeatures() {
                                         <Users className="m-auto size-6 text-blue-600" strokeWidth={1.5} />
                                     </div>
                                     <div className="space-y-2">
-                                        <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Team Operations</h2>
-                                        <p className="text-sm text-slate-500 leading-relaxed">Coordinate between pharmacists and stock managers with assigned roles and permissions.</p>
+                                        <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Operational handoff</h2>
+                                        <p className="text-sm text-slate-500 leading-relaxed">Move from alerts to reorders and purchase action without losing context between screens.</p>
                                     </div>
                                 </div>
                                 <div className="relative mt-6 flex h-full flex-col justify-center space-y-4 py-6 border-l border-slate-100 bg-slate-50/30">

@@ -6,6 +6,14 @@ import type { Html5Qrcode } from "html5-qrcode";
 
 const scannerElementId = "pharmaflow-barcode-scanner";
 
+type ScannerStatus =
+  | "idle"
+  | "loading"
+  | "active"
+  | "permission_denied"
+  | "success"
+  | "error";
+
 type BarcodeScannerProps = {
   initialCode?: string;
 };
@@ -17,12 +25,16 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
   const mountedRef = useRef(true);
   const lastDecodedRef = useRef("");
   const [manualCode, setManualCode] = useState(initialCode);
-  const [isStarting, setIsStarting] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>("Point camera at QR code or barcode.");
+  const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("idle");
+  const [feedback, setFeedback] = useState<string | null>(
+    "Point the rear camera at a barcode or QR code.",
+  );
   const [selectedCameraLabel, setSelectedCameraLabel] = useState<string | null>(null);
+  const [lastSuccessCode, setLastSuccessCode] = useState<string | null>(null);
 
   const hasCode = useMemo(() => Boolean(manualCode.trim()), [manualCode]);
+  const isStarting = scannerStatus === "loading";
+  const isScanning = scannerStatus === "active";
 
   useEffect(() => {
     setManualCode(initialCode);
@@ -37,8 +49,11 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
     };
   }, []);
 
-  async function stopScanner() {
+  async function stopScanner(nextStatus: ScannerStatus = "idle") {
     if (!scannerRef.current) {
+      if (mountedRef.current) {
+        setScannerStatus(nextStatus);
+      }
       return;
     }
 
@@ -54,7 +69,7 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
     processingRef.current = false;
 
     if (mountedRef.current) {
-      setIsScanning(false);
+      setScannerStatus(nextStatus);
       setSelectedCameraLabel(null);
     }
   }
@@ -83,6 +98,23 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
     return `Scanner failed to start. ${message}`;
   }
 
+  async function requestCameraAccess() {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      throw new Error("Camera access is not supported in this browser.");
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+
+    stream.getTracks().forEach((track) => track.stop());
+  }
+
   function pickPreferredCameraId(
     cameras: Array<{
       id: string;
@@ -104,12 +136,18 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
 
     console.debug("[pharmaflow-scan] scanner start requested");
     setFeedback("Starting camera...");
-    setIsStarting(true);
+    setScannerStatus("loading");
+    setLastSuccessCode(null);
 
     try {
+      await requestCameraAccess();
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
       const cameras = await Html5Qrcode.getCameras();
       const preferredCamera = pickPreferredCameraId(cameras);
+
+      if (!preferredCamera && cameras.length === 0) {
+        throw new Error("No camera is available on this device.");
+      }
 
       const scanner = new Html5Qrcode(scannerElementId, {
         formatsToSupport: [
@@ -175,34 +213,38 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
 
           if (mountedRef.current) {
             setManualCode(normalizedText);
+            setLastSuccessCode(normalizedText);
             setFeedback(`Detected code: ${normalizedText}`);
+            setScannerStatus("success");
           }
 
-          await stopScanner();
+          await stopScanner("success");
           router.push(`/scan?code=${encodeURIComponent(normalizedText)}`);
         },
         () => {},
       );
 
       if (mountedRef.current) {
-        setIsScanning(true);
+        setScannerStatus("active");
         setSelectedCameraLabel(preferredCamera?.label ?? "Default camera");
-        setFeedback("Point camera at QR code or barcode.");
+        setFeedback("Scanner is live. No code detected yet.");
       }
     } catch (error) {
       console.debug("[pharmaflow-scan] scanner init failure", {
         error,
       });
 
+      const nextMessage = getScannerErrorMessage(error);
+      const nextStatus = nextMessage.toLowerCase().includes("permission")
+        ? "permission_denied"
+        : "error";
+
       if (mountedRef.current) {
-        setFeedback(getScannerErrorMessage(error));
+        setFeedback(nextMessage);
+        setScannerStatus(nextStatus);
       }
 
-      await stopScanner();
-    } finally {
-      if (mountedRef.current) {
-        setIsStarting(false);
-      }
+      await stopScanner(nextStatus);
     }
   }
 
@@ -213,6 +255,7 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
 
     if (!nextCode) {
       setFeedback("Enter a barcode to search manually.");
+      setScannerStatus("error");
       return;
     }
 
@@ -243,7 +286,7 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
           {isScanning ? (
             <button
               type="button"
-              onClick={() => void stopScanner()}
+              onClick={() => void stopScanner("idle")}
               className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               Stop camera
@@ -253,18 +296,41 @@ export function BarcodeScanner({ initialCode = "" }: BarcodeScannerProps) {
       </div>
 
       {feedback ? (
-        <p className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+        <p
+          className={`mt-5 rounded-2xl border px-4 py-3 text-sm ${
+            scannerStatus === "permission_denied" || scannerStatus === "error"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : scannerStatus === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border-slate-200 bg-slate-50 text-slate-700"
+          }`}
+        >
           {feedback}
         </p>
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
-          {isStarting ? "Initializing camera" : isScanning ? "Scanner active" : "Scanner idle"}
+          {scannerStatus === "loading"
+            ? "Initializing camera"
+            : scannerStatus === "active"
+              ? "Scanner active"
+              : scannerStatus === "permission_denied"
+                ? "Permission denied"
+                : scannerStatus === "success"
+                  ? "Scan success"
+                  : scannerStatus === "error"
+                    ? "Scanner error"
+                    : "Scanner idle"}
         </span>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
           {selectedCameraLabel ? `Camera: ${selectedCameraLabel}` : "Rear camera preferred on mobile"}
         </span>
+        {lastSuccessCode ? (
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+            Last code: {lastSuccessCode}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-slate-950">

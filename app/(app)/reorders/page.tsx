@@ -687,20 +687,20 @@ export default async function ReordersPage() {
               ))}
             </div>
 
-            <div className="hidden overflow-x-auto lg:block">
+            <div className="app-table-shell hidden overflow-x-auto lg:block">
               <table className="app-table">
                 <thead>
-                  <tr className="text-slate-500">
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Medicine</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Current Stock</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Forecast 30d</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Days Left</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Risk</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Confidence</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Recommendation</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Suggested Supplier</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Status</th>
-                    <th className="border-b border-slate-200 px-3 py-3 font-medium">Create Draft PO</th>
+                  <tr>
+                    <th>Medicine</th>
+                    <th>Current Stock</th>
+                    <th>Forecast 30d</th>
+                    <th>Days Left</th>
+                    <th>Risk</th>
+                    <th>Confidence</th>
+                    <th>Recommendation</th>
+                    <th>Suggested Supplier</th>
+                    <th>Status</th>
+                    <th>Create Draft PO</th>
                   </tr>
                 </thead>
                 <tbody>

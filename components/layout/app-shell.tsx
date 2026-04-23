@@ -10,10 +10,10 @@ type AppShellProps = {
 
 export function AppShell({ children, userEmail }: AppShellProps) {
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[260px_1fr]">
+    <div className="min-h-screen lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
       <AppSidebar />
 
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-screen min-w-0 flex-col bg-background">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
           <div className="flex items-center justify-between px-6 py-3 lg:px-8">
             <div className="min-w-0">

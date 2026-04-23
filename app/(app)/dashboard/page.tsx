@@ -128,7 +128,7 @@ export default async function DashboardPage() {
   const fallbackUsed = !localWeather || weatherAwareSignals.length === 0;
   const weatherStatusMessage =
     weatherStatus === "missing_location"
-      ? `Live weather is inactive because the organization is missing ${missingLocationFields.join(", ")}. Seasonal fallback is active.`
+      ? `Live weather is inactive because the organization is missing ${missingLocationFields.join(", ")}. Add these in Settings > Pharmacy Location. Seasonal fallback is active.`
       : weatherStatus === "weather_unavailable"
         ? `Live weather could not be loaded for ${formatWeatherLocationInput(organization ?? undefined)}. Seasonal fallback is active.`
         : weatherStatus === "live_non_triggering"
@@ -140,7 +140,7 @@ export default async function DashboardPage() {
       <SectionIntro
         eyebrow="Overview"
         title="Dashboard"
-        description="Operational home for daily pharmacy work. Jump directly into the action that matters most right now."
+        description="Operational home for inventory, alerts, forecast-aware reorders, and local demand context."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -181,6 +181,11 @@ export default async function DashboardPage() {
             {localWeather ? (
               <p className="mt-2 text-xs font-medium text-slate-600">
                 Live weather: {localWeather.summary} in {localWeather.locationName}
+              </p>
+            ) : null}
+            {!hasRequiredWeatherLocation ? (
+              <p className="mt-2 text-xs font-medium text-amber-700">
+                Add Pharmacy Location in Settings to activate live weather.
               </p>
             ) : null}
           </div>

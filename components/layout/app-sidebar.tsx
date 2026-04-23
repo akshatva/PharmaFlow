@@ -99,7 +99,7 @@ export function AppSidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <aside className="hidden flex-col border-r border-slate-800/50 bg-sidebar lg:flex">
+      <aside className="hidden h-screen flex-col border-r border-slate-800/50 bg-sidebar lg:sticky lg:top-0 lg:flex">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-3 px-5 py-5 transition-opacity hover:opacity-80">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white shadow-sm">

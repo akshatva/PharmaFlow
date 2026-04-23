@@ -1,16 +1,29 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type AuthFormProps = {
   mode: "sign-in" | "sign-up";
+  nextPath?: string;
 };
 
-export function AuthForm({ mode }: AuthFormProps) {
+function getAuthErrorMessage(errorMessage: string) {
+  const normalized = errorMessage.toLowerCase();
+
+  if (
+    normalized.includes("email not confirmed") ||
+    normalized.includes("email not verified")
+  ) {
+    return "Your email is not confirmed yet. Open the verification email, then try signing in again.";
+  }
+
+  return errorMessage;
+}
+
+export function AuthForm({ mode, nextPath }: AuthFormProps) {
   const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
@@ -33,12 +46,12 @@ export function AuthForm({ mode }: AuthFormProps) {
       });
 
       if (signInError) {
-        setError(signInError.message);
+        setError(getAuthErrorMessage(signInError.message));
         setIsSubmitting(false);
         return;
       }
 
-      router.push("/onboarding");
+      router.push(nextPath || "/onboarding");
       router.refresh();
       return;
     }
@@ -55,7 +68,24 @@ export function AuthForm({ mode }: AuthFormProps) {
     });
 
     if (signUpError) {
-      setError(signUpError.message);
+      const isExistingAccountError =
+        signUpError.message.toLowerCase().includes("already registered") ||
+        signUpError.message.toLowerCase().includes("already exists");
+
+      setError(
+        isExistingAccountError
+          ? "An account with this email already exists. Please sign in instead."
+          : signUpError.message,
+      );
+      setIsSubmitting(false);
+      return;
+    }
+
+    const existingAccountDetected =
+      !data.session && Array.isArray(data.user?.identities) && data.user.identities.length === 0;
+
+    if (existingAccountDetected) {
+      setError("An account with this email already exists. Please sign in instead.");
       setIsSubmitting(false);
       return;
     }
@@ -131,19 +161,11 @@ export function AuthForm({ mode }: AuthFormProps) {
       </p>
 
       {mode === "sign-up" ? (
-        <p className="text-sm text-slate-500">
-          Email confirmation enabled in Supabase? Your link will return here through{" "}
+        <p className="text-sm leading-6 text-slate-500">
+          Your verification link returns through{" "}
           <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[13px]">/auth/callback</code>.
         </p>
-      ) : (
-        <p className="text-sm text-slate-500">
-          Need an account first?{" "}
-          <Link className="font-medium text-accent" href="/sign-up">
-            Create one here
-          </Link>
-          .
-        </p>
-      )}
+      ) : null}
     </form>
   );
 }

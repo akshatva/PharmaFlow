@@ -36,6 +36,24 @@ function normalizeHeader(value: string) {
   return value.trim().toLowerCase();
 }
 
+const headerAliases: Record<string, string> = {
+  // quantity_sold
+  qty: "quantity_sold",
+  quantity: "quantity_sold",
+  units: "quantity_sold",
+  sold_qty: "quantity_sold",
+  // sold_at
+  date: "sold_at",
+  sale_date: "sold_at",
+  sold_date: "sold_at",
+  timestamp: "sold_at",
+  created_at: "sold_at",
+  // medicine_name
+  medicine: "medicine_name",
+  product_name: "medicine_name",
+  item_name: "medicine_name",
+};
+
 function toNullableText(value: string) {
   return value ? value : null;
 }
@@ -192,5 +210,6 @@ export function validateSalesImportRows(input: unknown) {
 }
 
 export function normalizeSalesCsvHeader(header: string) {
-  return normalizeHeader(header);
+  const normalized = normalizeHeader(header);
+  return headerAliases[normalized] || normalized;
 }

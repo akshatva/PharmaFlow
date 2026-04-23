@@ -15,8 +15,8 @@ export default async function SignUpPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md">
-      <div className="mb-8">
+    <div className="mx-auto w-full max-w-lg space-y-8">
+      <div className="space-y-4">
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-accent">Sign Up</p>
         <h2 className="mt-3 text-3xl font-semibold text-slate-950">Create your workspace</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -24,9 +24,11 @@ export default async function SignUpPage() {
         </p>
       </div>
 
-      <AuthForm mode="sign-up" />
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+        <AuthForm mode="sign-up" />
+      </div>
 
-      <p className="mt-6 text-sm text-slate-600">
+      <p className="text-sm text-slate-600">
         Already have an account?{" "}
         <Link className="font-medium text-accent transition hover:text-teal-700" href="/sign-in">
           Sign in

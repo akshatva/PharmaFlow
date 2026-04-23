@@ -65,32 +65,25 @@ export default async function SettingsPage() {
     isMissingColumnError(organizationError, "state") ||
     isMissingColumnError(organizationError, "country");
 
-  if (profileError) {
-    if (
-      profileError.message.includes("alerts_email_enabled") ||
+  const isNotificationSetupMissing =
+    !!profileError &&
+    (profileError.message.includes("alerts_email_enabled") ||
       profileError.message.includes("phone_number") ||
-      profileError.message.includes("whatsapp_enabled")
-    ) {
-      return (
-        <div className="space-y-6">
-          <SectionIntro
-            eyebrow="Workspace"
-            title="Settings"
-            description="Manage lightweight notification preferences for your PharmaFlow account."
-          />
-          <SetupNotice
-            title="Profile notification column not available yet"
-            description="Add the notification fields to the `profiles` table, then refresh the app to enable email and WhatsApp alert settings."
-          />
-        </div>
+      profileError.message.includes("whatsapp_enabled"));
+
+  if (profileError) {
+    if (isNotificationSetupMissing) {
+      console.warn("Settings notifications schema mismatch", {
+        code: profileError.code,
+        message: profileError.message,
+      });
+    } else {
+      throw new Error(
+        process.env.NODE_ENV === "development"
+          ? `Unable to load settings: ${profileError.message}`
+          : "Unable to load settings.",
       );
     }
-
-    throw new Error(
-      process.env.NODE_ENV === "development"
-        ? `Unable to load settings: ${profileError.message}`
-        : "Unable to load settings.",
-    );
   }
 
   if (organizationError && !isLocationSetupMissing) {
@@ -102,22 +95,27 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <SectionIntro
         eyebrow="Workspace"
         title="Settings"
         description="Manage pharmacy location and lightweight notification preferences for your PharmaFlow account."
       />
 
-      <section className="space-y-4">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50/80 px-6 py-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Organization
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-950">Pharmacy Location</h2>
+      <section id="pharmacy-location" className="space-y-4 scroll-mt-24">
+        <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-6 py-5 shadow-sm ring-1 ring-slate-100">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Organization
+            </p>
+            <span className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-teal-700">
+              Used for live weather
+            </span>
+          </div>
+          <h2 className="mt-3 text-xl font-semibold text-slate-950">Pharmacy Location</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Organization-scoped settings for the pharmacy location used by local demand and
-            weather-aware workflows.
+            Save the pharmacy city, state, and country here so local demand and weather-aware
+            workflows can activate correctly.
           </p>
         </div>
 
@@ -136,7 +134,7 @@ export default async function SettingsPage() {
         )}
       </section>
 
-      <section className="space-y-4">
+      <section id="notifications" className="space-y-4 scroll-mt-24">
         <div className="rounded-3xl border border-slate-200 bg-slate-50/80 px-6 py-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Profile
@@ -147,12 +145,19 @@ export default async function SettingsPage() {
           </p>
         </div>
 
-        <AlertsEmailSettings
-          email={profile?.email ?? user.email ?? "your account email"}
-          initialEnabled={profile?.alerts_email_enabled ?? true}
-          initialPhoneNumber={profile?.phone_number ?? ""}
-          initialWhatsAppEnabled={profile?.whatsapp_enabled ?? false}
-        />
+        {isNotificationSetupMissing ? (
+          <SetupNotice
+            title="Profile notification columns not available yet"
+            description="Add the notification fields to the `profiles` table, then refresh the app to enable email and WhatsApp alert settings."
+          />
+        ) : (
+          <AlertsEmailSettings
+            email={profile?.email ?? user.email ?? "your account email"}
+            initialEnabled={profile?.alerts_email_enabled ?? true}
+            initialPhoneNumber={profile?.phone_number ?? ""}
+            initialWhatsAppEnabled={profile?.whatsapp_enabled ?? false}
+          />
+        )}
       </section>
     </div>
   );
