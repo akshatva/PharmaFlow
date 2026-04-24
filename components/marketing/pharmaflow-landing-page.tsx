@@ -3,12 +3,36 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertTriangle, LineChart, SearchCheck, FlaskConical } from "lucide-react";
+import { AlertTriangle, LineChart, SearchCheck, Menu, X, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import DotPattern from "@/components/ui/dot-pattern-1";
 import { Hero } from "@/components/ui/animated-hero";
 import { UpgradeBanner } from "@/components/ui/upgrade-banner";
 import { HeroScrollDemo } from "@/components/ui/hero-scroll-demo";
 import { CircularRevealHeading } from "@/components/ui/circular-reveal-heading";
+import { Button } from "@/components/ui/button";
+import { LiquidGlassBar } from "@/components/ui/liquid-glass-bar";
+import { PharmaFlowLogo } from "@/components/ui/pharma-flow-logo";
+
+// Animation variants
+const fadeIn = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.8, ease: "easeOut" },
+  },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.15,
+    },
+  },
+};
 
 
 function ProofCard({
@@ -19,12 +43,15 @@ function ProofCard({
   label: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-center shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
+    <motion.div 
+      variants={fadeIn}
+      className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-center shadow-[0_12px_32px_rgba(15,23,42,0.04)]"
+    >
       <p className="text-2xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
         {label}
       </p>
-    </div>
+    </motion.div>
   );
 }
 
@@ -180,6 +207,7 @@ function ProductGlimpse() {
 export function PharmaFlowLandingPage() {
   const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -187,29 +215,77 @@ export function PharmaFlowLandingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  return (
-    <main className="min-h-screen bg-[#f6f7f5] text-slate-950">
+  return (    <main className="min-h-screen bg-[#f6f7f5] text-slate-950">
       {/* ── FLOATING GLASSMORPHIC NAVBAR ── */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-4 pt-4 sm:px-6 lg:px-8">
-        <div
-          className={`mx-auto flex max-w-5xl items-center justify-between rounded-2xl px-4 py-3 transition-all duration-500 ${
-            scrolled
-              ? "bg-[#111111]/30 backdrop-blur-3xl saturate-150 shadow-[0_8px_40px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.1)] ring-1 ring-white/10"
-              : "bg-[#111111]/20 backdrop-blur-2xl saturate-150 ring-1 ring-white/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]"
-          }`}
-        >
+      <motion.header 
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: "circOut" }}
+        className="fixed top-0 left-0 right-0 z-50 px-4 pt-4 sm:px-6 lg:px-8"
+      >
+        <LiquidGlassBar scrolled={scrolled}>
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-b from-slate-100 via-slate-200 to-slate-300 shadow-[inset_0_1px_1px_rgba(255,255,255,0.8),0_1px_2px_rgba(0,0,0,0.1)] border border-slate-400/30">
-              <FlaskConical className="h-4 w-4 text-slate-800" />
-            </div>
-            <span className="bg-gradient-to-b from-slate-950 to-slate-700 bg-clip-text text-[14px] font-bold tracking-tight text-transparent">
+          <Link href="/" className="flex items-center gap-2">
+            <motion.div 
+              whileHover={{ rotate: 5, scale: 1.1 }}
+              className="flex h-14 w-14 items-center justify-center p-0.5 filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]"
+            >
+              <PharmaFlowLogo className="h-full w-full" />
+            </motion.div>
+            <span className="bg-gradient-to-b from-slate-950 via-slate-800 to-slate-700 bg-clip-text text-[14px] font-bold tracking-tight text-transparent">
               PharmaFlow
             </span>
           </Link>
+ 
+          {/* Centre nav links - only show when not scrolled/compact */}
+          {!scrolled && (
+            <nav className="hidden items-center gap-0.5 md:flex">
+              {[
+                { label: "Home", href: "/" },
+                { label: "Features", href: "#capabilities" },
+              ].map(({ label, href }) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="rounded-full px-3.5 py-1.5 text-sm font-bold text-slate-900/80 transition-colors hover:bg-black/5 hover:text-black"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          )}
+ 
+          {/* Right CTA */}
+          <div className="flex items-center gap-3">
+            {!scrolled && (
+              <Link
+                href="/sign-in"
+                className="hidden text-sm font-semibold text-slate-800 transition hover:text-black sm:block"
+              >
+                Sign in
+              </Link>
+            )}
+            <Link
+              href="/sign-in"
+              className="inline-flex items-center justify-center rounded-full bg-gradient-to-b from-slate-800 via-slate-900 to-slate-950 px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:from-slate-700 hover:to-slate-900 active:scale-95 border border-slate-700/50"
+            >
+              {scrolled ? "Join" : "Get started"}
+            </Link>
+            <button className="flex md:hidden text-slate-900" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </LiquidGlassBar>
 
-          {/* Centre nav links */}
-          <nav className="hidden items-center gap-0.5 md:flex">
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed inset-x-4 top-20 z-[49] flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur-xl md:hidden"
+          >
             {[
               { label: "Home", href: "/" },
               { label: "Features", href: "#capabilities" },
@@ -217,30 +293,31 @@ export function PharmaFlowLandingPage() {
               <Link
                 key={label}
                 href={href}
-                className="rounded-full px-3.5 py-1.5 text-sm font-bold text-slate-800 transition-colors hover:bg-black/5 hover:text-black"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center justify-between rounded-xl px-4 py-3 text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors"
               >
                 {label}
+                <ChevronRight className="h-4 w-4 text-slate-400" />
               </Link>
             ))}
-          </nav>
-
-          {/* Right CTA */}
-          <div className="flex items-center gap-3">
-            <Link
-              href="/sign-in"
-              className="hidden text-sm font-semibold text-slate-600 transition hover:text-slate-950 sm:block"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/sign-in"
-              className="inline-flex items-center justify-center rounded-full bg-gradient-to-b from-slate-50 via-slate-200 to-slate-300 px-4 py-2 text-sm font-bold text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.1)] transition hover:from-white hover:to-slate-200 active:scale-95 border border-slate-400/40"
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </header>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Link
+                href="/sign-in"
+                className="flex items-center justify-center rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-900"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/sign-in"
+                className="flex items-center justify-center rounded-xl bg-slate-950 py-3 text-sm font-bold text-white"
+              >
+                Get started
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </motion.header>
 
       <div className="space-y-6 px-3 pt-24 pb-6 sm:px-4 lg:px-6 lg:pb-8">
         <LayerShell>
@@ -259,17 +336,29 @@ export function PharmaFlowLandingPage() {
 
         <LayerShell>
           <section className="border-b border-slate-200/70 bg-white">
-            <div className="mx-auto max-w-5xl px-5 py-16 sm:px-6 lg:px-8 lg:py-20">
+            <motion.div 
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={staggerContainer}
+              className="mx-auto max-w-5xl px-5 py-16 sm:px-6 lg:px-8 lg:py-20"
+            >
               <div className="grid gap-4 md:grid-cols-3">
                 <ProofCard value="Batch-aware" label="Inventory" />
                 <ProofCard value="Action-first" label="Alerts" />
                 <ProofCard value="14 days" label="Reorder cover" />
               </div>
-            </div>
+            </motion.div>
           </section>
 
           <section id="capabilities" className="bg-[#f6f7f5]/45">
-            <div className="mx-auto max-w-6xl px-5 py-24 sm:px-6 lg:px-8">
+            <motion.div 
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-50px" }}
+              variants={fadeIn}
+              className="mx-auto max-w-6xl px-5 py-24 sm:px-6 lg:px-8"
+            >
               <div className="mx-auto max-w-2xl text-center mb-20">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                   Capabilities & Workflow
@@ -321,7 +410,7 @@ export function PharmaFlowLandingPage() {
                   ]}
                 />
               </div>
-            </div>
+            </motion.div>
           </section>
         </LayerShell>
 
@@ -333,7 +422,13 @@ export function PharmaFlowLandingPage() {
 
         <LayerShell>
           <section className="bg-white">
-            <div className="mx-auto max-w-4xl px-5 py-20 text-center sm:px-6 lg:px-8 lg:py-28">
+            <motion.div 
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              variants={fadeIn}
+              className="mx-auto max-w-4xl px-5 py-20 text-center sm:px-6 lg:px-8 lg:py-28"
+            >
               <div className="relative mx-auto mb-12 max-w-5xl overflow-hidden rounded-[32px] border border-slate-200 bg-[#f8fafc]">
                 <DotPattern width={6} height={6} className="fill-slate-300/70" />
                 <div className="absolute -left-1.5 -top-1.5 h-3 w-3 bg-slate-900" />
@@ -370,7 +465,7 @@ export function PharmaFlowLandingPage() {
                   Get started
                 </Link>
               </div>
-            </div>
+            </motion.div>
           </section>
         </LayerShell>
       </div>
