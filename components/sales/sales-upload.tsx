@@ -8,6 +8,7 @@ import { importSalesCsv } from "@/app/(app)/sales/actions";
 import {
   normalizeSalesCsvHeader,
   requiredSalesColumns,
+  salesColumnAliases,
   validateSalesCsvRows,
   type SalesImportRow,
   type SalesPreviewRow,
@@ -37,6 +38,43 @@ function ImportSubmitButton({
       {label}
     </button>
   );
+}
+
+function SalesPreviewStatus({ row }: { row: SalesPreviewRow }) {
+  if (!row.errors.length) {
+    return (
+      <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        Valid
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+        Needs fix
+      </span>
+      <div className="space-y-1 rounded-xl border border-red-100 bg-red-50/70 px-3 py-2">
+        {row.errors.map((error) => (
+          <p key={error} className="text-xs leading-5 text-red-700">
+            {error}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatAcceptedColumns(column: keyof typeof salesColumnAliases) {
+  return salesColumnAliases[column].join(", ");
+}
+
+function formatMissingColumn(column: string) {
+  if (column in salesColumnAliases) {
+    return `${column} (${formatAcceptedColumns(column as keyof typeof salesColumnAliases)})`;
+  }
+
+  return column;
 }
 
 export function SalesUpload() {
@@ -84,6 +122,23 @@ export function SalesUpload() {
         const nonFatalErrors = results.errors.filter(
           (error) => error.code !== "UndetectableDelimiter",
         );
+        const hasHeaderRow = (results.meta.fields ?? []).some((field) => field.trim());
+        const hasDataRows = results.data.some((row) =>
+          Object.values(row ?? {}).some((value) => String(value ?? "").trim()),
+        );
+
+        if (!hasHeaderRow) {
+          setParseError(
+            "CSV is missing headers. Add a header row with medicine_name, quantity_sold, and sold_at.",
+          );
+          return;
+        }
+
+        if (!hasDataRows) {
+          setParseError("CSV is empty. Add at least one sales row under the header.");
+          return;
+        }
+
         const validation = validateSalesCsvRows(results.data, results.meta.fields ?? []);
 
         setMissingColumns(validation.missingColumns);
@@ -107,6 +162,10 @@ export function SalesUpload() {
         if (results.errors.length) {
           setParseWarnings(results.errors.map((error) => error.message).filter(Boolean));
         }
+
+        if (!validation.previewRows.length) {
+          setParseError("No sales rows could be read from this CSV.");
+        }
       },
       error(error) {
         setParseError(error.message);
@@ -123,26 +182,40 @@ export function SalesUpload() {
 
   return (
     <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <h3 className="text-lg font-semibold text-slate-950">Sales import</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Upload sales records for your organization, validate the rows, and import the known medicines into PharmaFlow.
+              Upload a CSV, review the preview, then import matched medicines.
             </p>
             <p className="mt-3 text-sm text-slate-500">
-              Required columns: <code>medicine_name</code>, <code>quantity_sold</code>, <code>sold_at</code>.
+              Expected columns (canonical): medicine_name, quantity_sold, sold_at.
             </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Also supports aliases: <code>qty</code>, <code>date</code>, <code>medicine</code>, <code>product_name</code>, etc.
+            <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="font-semibold text-slate-700">Medicine</p>
+                <p className="mt-1 leading-5">{formatAcceptedColumns("medicine_name")}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="font-semibold text-slate-700">Quantity</p>
+                <p className="mt-1 leading-5">{formatAcceptedColumns("quantity_sold")}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="font-semibold text-slate-700">Sale date</p>
+                <p className="mt-1 leading-5">{formatAcceptedColumns("sold_at")}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Examples that work: medicine,qty,date | product_name,quantity,sale_date |
+              medicine_name,quantity_sold,sold_at
             </p>
-            <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              CSV is the only working import format right now. PDF and image files can be selected,
-              but extraction is not implemented yet in this pass.
+            <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+              CSV import is active. PDF and image extraction are not enabled yet.
             </p>
           </div>
 
-          <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
+          <label className="inline-flex w-fit cursor-pointer items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
             <input
               type="file"
               accept=".csv,text/csv,.pdf,image/*"
@@ -155,9 +228,9 @@ export function SalesUpload() {
 
         <div className="mt-5 space-y-3">
           {fileName ? (
-            <p className="text-sm text-slate-600">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Selected file: <span className="font-medium text-slate-900">{fileName}</span>
-            </p>
+            </div>
           ) : null}
 
           {parseError ? (
@@ -174,7 +247,7 @@ export function SalesUpload() {
 
           {missingColumns.length ? (
             <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              Missing required columns: {missingColumns.join(", ")}.
+              Missing required columns: {missingColumns.map(formatMissingColumn).join("; ")}.
             </p>
           ) : null}
 
@@ -197,21 +270,21 @@ export function SalesUpload() {
           ) : null}
         </div>
 
-        <div className="mt-6 grid gap-3 text-sm text-slate-600 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 text-sm text-slate-600 sm:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Preview rows</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Preview rows</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">{previewRows.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Valid rows</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Valid rows</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">{validRows.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Imported</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Imported</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">{importState.importedCount}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Skipped</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Skipped</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">
               {invalidRows.length + skippedEmptyRows + importState.skippedCount}
             </p>
@@ -225,7 +298,7 @@ export function SalesUpload() {
             label={isPending ? "Importing..." : "Import sales"}
           />
           {!fileName ? (
-            <span className="text-sm text-slate-500">Choose a file to begin. CSV is currently required for import.</span>
+            <span className="text-sm text-slate-500">Choose a CSV file to begin.</span>
           ) : !canImport ? (
             <span className="text-sm text-slate-500">Fix validation issues before importing.</span>
           ) : (
@@ -236,16 +309,16 @@ export function SalesUpload() {
         </form>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-950">Preview</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Rows are trimmed, empty lines are skipped, and row-level issues are shown before import.
+              Review row status before import.
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
-            Expected columns: {requiredSalesColumns.join(", ")}
+          <div className="w-fit rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-600">
+            Required: {requiredSalesColumns.join(", ")}
           </div>
         </div>
 
@@ -279,17 +352,7 @@ export function SalesUpload() {
                       {row.values.sku || "—"}
                     </td>
                     <td>
-                      {row.errors.length ? (
-                        <div className="space-y-1">
-                          {row.errors.map((error) => (
-                            <p key={error} className="text-red-600">
-                              {error}
-                            </p>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-emerald-700">Valid</span>
-                      )}
+                      <SalesPreviewStatus row={row} />
                     </td>
                   </tr>
                 ))}
@@ -298,7 +361,7 @@ export function SalesUpload() {
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            No rows to preview yet. Upload a CSV file to validate and inspect the data before importing it.
+            No rows to preview yet. Upload a CSV to validate before importing.
           </div>
         )}
       </div>

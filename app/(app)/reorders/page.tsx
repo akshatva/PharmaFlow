@@ -153,10 +153,10 @@ function getSmartOrderingSuggestion({
     baseSuggestedQuantity: decision.baseRecommendedReorderQuantity,
     explainabilityNote:
       decision.availability === "available" && decision.demandSignalAdjusted
-        ? `No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula with a ${decision.appliedDemandSignalUpliftPercentage}% local demand uplift.`
+        ? `Rule fallback with +${decision.appliedDemandSignalUpliftPercentage}% local demand.`
         : decision.availability === "available"
-          ? "No forecast available or confidence is low, so PharmaFlow is using the fallback rules-based reorder formula."
-        : "No forecast available or confidence is low, and there is not enough recent sales data to calculate a reliable fallback reorder quantity.",
+          ? "Rule fallback."
+        : "Not enough recent sales data.",
     confidenceNote:
       decision.availability === "available"
         ? decision.confidenceNote
@@ -292,11 +292,11 @@ export default async function ReordersPage() {
           <SectionIntro
             eyebrow="Action"
             title="Reorders"
-            description="Forecast-aware reorder workflow for medicines that need attention, with supplier selection and lightweight purchasing follow-through."
+            description="Review and create draft POs."
           />
           <SetupNotice
-            title="Reorder workflow needs database setup"
-            description="The `reorder_items` table is missing in your connected Supabase project. Run the reorder_items SQL in Supabase, reload the schema, and refresh the app."
+            title="Reorders not ready"
+            description="Apply the reorder migration and refresh."
           />
         </div>
       );
@@ -308,11 +308,11 @@ export default async function ReordersPage() {
           <SectionIntro
             eyebrow="Action"
             title="Reorders"
-            description="Forecast-aware reorder workflow for medicines that need attention, with supplier selection and lightweight purchasing follow-through."
+            description="Review and create draft POs."
           />
           <SetupNotice
-            title="Supplier workflow needs database setup"
-            description="The `suppliers` table is missing in your connected Supabase project. Run the supplier and purchase order SQL in Supabase, reload the schema, and refresh the app."
+            title="Suppliers not ready"
+            description="Apply the supplier migration and refresh."
           />
         </div>
       );
@@ -324,11 +324,11 @@ export default async function ReordersPage() {
           <SectionIntro
             eyebrow="Action"
             title="Reorders"
-            description="Forecast-aware reorder workflow for medicines that need attention, with supplier selection and lightweight purchasing follow-through."
+            description="Review and create draft POs."
           />
           <SetupNotice
-            title="Purchase order workflow needs database setup"
-            description="The `purchase_orders` table is missing in your connected Supabase project. Run the supplier and purchase order SQL in Supabase, reload the schema, and refresh the app."
+            title="Purchase orders not ready"
+            description="Apply the purchase order migration and refresh."
           />
         </div>
       );
@@ -521,7 +521,7 @@ export default async function ReordersPage() {
       <SectionIntro
         eyebrow="Action"
         title="Reorders"
-        description="Forecast-aware reorder workflow for medicines that need attention, with supplier selection and lightweight purchasing follow-through."
+        description="Review and create draft POs."
       />
       <div className="flex flex-wrap gap-3">
         <ExportButton href="/api/exports/reorders" label="Export Reorder Report" />
@@ -537,19 +537,19 @@ export default async function ReordersPage() {
           <p className="app-stat-value">{orderedCount}</p>
         </div>
         <div className="app-stat-card">
-          <p className="app-stat-eyebrow">Forecast Driven</p>
+          <p className="app-stat-eyebrow">Forecast</p>
           <p className="app-stat-value">{forecastDrivenCount}</p>
         </div>
         <div className="app-stat-card">
-          <p className="app-stat-eyebrow">Fallback</p>
+          <p className="app-stat-eyebrow">Rules</p>
           <p className="app-stat-value">{fallbackCount}</p>
         </div>
       </div>
 
       {forecastUnavailable ? (
         <SetupNotice
-          title="Forecast results unavailable"
-          description="The `forecast_results` table is not available yet, so reorder suggestions are falling back to the existing rule-based logic. Once forecasts are generated, this page will automatically use them."
+          title="Forecasts off"
+          description="Using rules."
         />
       ) : null}
 
@@ -557,29 +557,31 @@ export default async function ReordersPage() {
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Reorder list</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Forecast-backed recommendations appear first. Lower-confidence cases fall back to the
-              rules-based reorder formula so the workflow remains safe and understandable.
-            </p>
           </div>
 
-          <Link
-            href="/forecast"
-            className="app-button-secondary py-2 text-xs"
-          >
-            View full forecast
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              {rows.length} item{rows.length === 1 ? "" : "s"}
+            </span>
+            <Link
+              href="/forecast"
+              className="app-button-secondary py-2 text-xs"
+            >
+              View full forecast
+            </Link>
+          </div>
         </div>
 
         {rows.length === 0 ? (
           <div className="p-5 sm:p-6">
             <div className="app-empty-state">
-              No reorder items yet. Create them from Alerts or Insights when something needs action.
+              <h4 className="app-empty-title">All caught up</h4>
+              <p className="app-empty-copy">There are no pending reorders that require your attention.</p>
             </div>
           </div>
         ) : (
           <>
-            <div className="mt-6 space-y-4 lg:hidden">
+            <div className="space-y-4 px-4 py-5 sm:px-5 lg:hidden">
               {rows.map((row) => (
                 <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -600,7 +602,7 @@ export default async function ReordersPage() {
                       {row.confidenceLevel ?? "none"}
                     </span>
                     <span className="app-badge border-slate-200 bg-white text-slate-700">
-                      {row.usedForecast ? "Forecast guided" : "Fallback"}
+                      {row.usedForecast ? "Forecast" : "Rules"}
                     </span>
                     {row.demandSignalAdjusted ? (
                       <span className="app-badge border-blue-200 bg-blue-50 text-blue-700">
@@ -611,36 +613,38 @@ export default async function ReordersPage() {
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Current stock</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Stock</p>
                       <p className="mt-1 text-sm text-slate-700">{row.currentStock}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Recent sales (30d)</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Sales</p>
                       <p className="mt-1 text-sm text-slate-700">{row.recentSales}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Forecast 30d</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">30d</p>
                       <p className="mt-1 text-sm text-slate-700">{formatDecimal(row.forecast30d)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Days of stock left</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Cover</p>
                       <p className="mt-1 text-sm text-slate-700">{formatDaysOfStockLeft(row.daysOfStockLeft)}</p>
                     </div>
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
                     <p className="text-sm font-medium text-slate-900">{row.recommendation}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{row.explainabilityNote}</p>
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+                      {row.explainabilityNote}
+                    </div>
                     {row.demandSignalAdjusted && row.demandSignalExplanation ? (
-                      <p className="mt-2 text-xs leading-5 text-blue-700">{row.demandSignalExplanation}</p>
+                      <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
+                        {row.demandSignalExplanation}
+                      </p>
                     ) : null}
-                    <p className="mt-2 text-xs leading-5 text-slate-500">{row.confidenceNote}</p>
-                    <p className="mt-2 text-xs leading-5 text-slate-500">Original trigger: {row.originalReason}</p>
                   </div>
 
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Suggested quantity</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Quantity</p>
                       <p className="mt-1 text-sm font-medium text-slate-900">
                         {row.suggestedQuantity > 0 ? row.suggestedQuantity : "No draft suggested"}
                       </p>
@@ -653,11 +657,13 @@ export default async function ReordersPage() {
                       ) : null}
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Model used</p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">{row.modelName ?? "Fallback only"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Method</p>
+                      <p className="mt-1 text-sm font-medium text-slate-900">
+                        {row.usedForecast ? "Forecast" : "Rules"}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Suggested supplier</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Supplier</p>
                       <p className="mt-1 text-sm font-medium text-slate-900">
                         {row.suggestedSupplierName ?? "Select manually"}
                       </p>
@@ -668,7 +674,7 @@ export default async function ReordersPage() {
                   <div className="mt-4">
                     {row.recommendation === "Avoid Reorder" || row.suggestedQuantity <= 0 ? (
                       <p className="text-xs font-medium text-slate-500">
-                        No draft suggested for this item right now.
+                        No draft suggested.
                       </p>
                     ) : (
                       <CreatePoFromReorderForm
@@ -692,35 +698,32 @@ export default async function ReordersPage() {
                 <thead>
                   <tr>
                     <th>Medicine</th>
-                    <th>Current Stock</th>
-                    <th>Forecast 30d</th>
-                    <th>Days Left</th>
+                    <th>Stock</th>
+                    <th>30d</th>
+                    <th>Cover</th>
                     <th>Risk</th>
                     <th>Confidence</th>
                     <th>Recommendation</th>
-                    <th>Suggested Supplier</th>
+                    <th>Supplier</th>
                     <th>Status</th>
-                    <th>Create Draft PO</th>
+                    <th>Draft PO</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id}>
                       <td className="border-b border-slate-100 px-3 py-4">
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <p className="font-medium text-slate-900">{row.medicineName}</p>
                           {row.demandSignalAdjusted ? (
-                            <p className="text-xs font-medium text-blue-700">
+                            <p className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                               Adjusted +{row.appliedDemandSignalUpliftPercentage}% for{" "}
                               {row.demandSignalTitle?.toLowerCase()}
                             </p>
                           ) : null}
-                          <p className="text-xs text-slate-500">{row.explainabilityNote}</p>
-                          {row.demandSignalAdjusted && row.demandSignalExplanation ? (
-                            <p className="text-xs text-slate-500">{row.demandSignalExplanation}</p>
-                          ) : null}
-                          <p className="text-xs text-slate-500">{row.confidenceNote}</p>
-                          <p className="text-xs text-slate-500">Model: {row.modelName ?? "Fallback only"}</p>
+                          <p className="text-xs text-slate-500">
+                            {row.usedForecast ? "Forecast" : "Rules"}
+                          </p>
                         </div>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
@@ -751,7 +754,7 @@ export default async function ReordersPage() {
                         </span>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-4">
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <p className="font-medium text-slate-900">{row.recommendation}</p>
                           <p className="text-xs text-slate-500">
                             {row.suggestedQuantity > 0
@@ -766,8 +769,16 @@ export default async function ReordersPage() {
                             </p>
                           ) : null}
                           <p className="text-xs text-slate-500">
-                            {row.usedForecast ? "Forecast guided" : "Fallback logic"}
+                            {row.usedForecast ? "Forecast" : "Rules"}
                           </p>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                            {row.explainabilityNote}
+                          </div>
+                          {row.demandSignalAdjusted && row.demandSignalExplanation ? (
+                            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
+                              {row.demandSignalExplanation}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-4 text-slate-700">

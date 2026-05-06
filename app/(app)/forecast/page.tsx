@@ -205,7 +205,7 @@ export default async function ForecastPage() {
         baseline_daily_demand: row.daily_demand_avg,
         active_uplift_percentage: 0,
         demand_signal_title: null,
-        signal_explanation: "No saved signal-aware forecast explanation is available yet.",
+        signal_explanation: "No signal uplift.",
       }),
     );
     forecastError = fallbackForecastQuery.error;
@@ -219,12 +219,12 @@ export default async function ForecastPage() {
         <div className="space-y-6">
           <SectionIntro
             eyebrow="Forecasting"
-            title="Demand Forecast"
-            description="Review signal-adjusted demand, baseline sales pace, and short-horizon stock coverage before acting."
+            title="Forecast"
+            description="Demand and stock cover."
           />
           <SetupNotice
-            title="Forecasting is not set up in Supabase yet"
-            description="This workspace is missing the `forecast_results` table, so PharmaFlow cannot show saved forecast output yet. Apply the forecast migration, generate forecasts, and refresh this page. Until then, the rest of the app will continue using the existing rules-based inventory and reorder logic."
+            title="Forecasting not ready"
+            description="Apply the forecast migration and generate forecasts."
           />
         </div>
       );
@@ -309,8 +309,8 @@ export default async function ForecastPage() {
     <div className="space-y-6">
       <SectionIntro
         eyebrow="Forecasting"
-        title="Demand Forecast"
-        description="Signal-adjusted 7-day demand based on the last 30 days of sales and any active local demand uplift."
+        title="Forecast"
+        description="7-day demand."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -323,7 +323,7 @@ export default async function ForecastPage() {
           <p className="app-stat-value text-red-700">{highRiskCount}</p>
         </div>
         <div className="app-stat-card border-l-2 border-l-blue-400">
-          <p className="app-stat-eyebrow">Signal adjusted</p>
+          <p className="app-stat-eyebrow">Adjusted</p>
           <p className="app-stat-value text-blue-700">{adjustedCount}</p>
         </div>
         <div className="app-stat-card">
@@ -334,84 +334,127 @@ export default async function ForecastPage() {
 
       <section className="app-card">
         <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
-          <h3 className="text-sm font-semibold text-slate-900">Forecast table</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Shows baseline daily sales, active uplift, forecasted 7-day demand, and the short reason behind each forecast.
-          </p>
+          <h3 className="text-sm font-semibold text-slate-900">Forecasts</h3>
         </div>
 
         {rows.length === 0 ? (
           <div className="px-5 py-12 sm:px-6">
             <div className="app-empty-state">
-              No saved forecast output is available yet. Generate forecasts after you have medicine and sales data, then refresh this page.
+              <h4 className="app-empty-title">No forecast data</h4>
+              <p className="app-empty-copy">Import sales and inventory data to generate predictions.</p>
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="app-table">
-              <thead>
-                <tr>
-                  <th>Medicine</th>
-                  <th>Category</th>
-                  <th>Baseline Daily</th>
-                  <th>Active Uplift</th>
-                  <th>Forecast 7d</th>
-                  <th>Days Left</th>
-                  <th>Risk</th>
-                  <th>Confidence</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const RiskIcon = getRiskIcon(row.daysOfStockLeft);
+          <>
+            {/* Mobile card view */}
+            <div className="space-y-4 p-4 sm:p-5 lg:hidden">
+              {rows.map((row) => {
+                const RiskIcon = getRiskIcon(row.daysOfStockLeft);
+                return (
+                  <div key={row.medicineId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{row.medicineName}</p>
+                        <p className="mt-1 text-xs text-slate-500">{formatDemandCategoryLabel(row.demandCategory)}</p>
+                      </div>
+                      <span className={`app-badge flex-shrink-0 ${getRiskClasses(row.daysOfStockLeft)}`}>
+                        <RiskIcon className="mr-1 h-3.5 w-3.5" />
+                        {getRiskLabel(row.daysOfStockLeft)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-slate-400">Baseline</p>
+                        <p className="mt-0.5 text-sm tabular-nums text-slate-700">{formatDecimal(row.baselineDailyDemand)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-slate-400">Uplift</p>
+                        <p className="mt-0.5 text-sm tabular-nums text-slate-700">{row.activeUpliftPercentage > 0 ? `+${row.activeUpliftPercentage}%` : "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-slate-400">7d Forecast</p>
+                        <p className="mt-0.5 text-sm tabular-nums text-slate-700">{formatDecimal(row.forecast7d)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-slate-400">Cover</p>
+                        <p className="mt-0.5 text-sm tabular-nums text-slate-700">{formatDaysOfStockLeft(row.daysOfStockLeft)}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
+                        {row.confidenceLevel ?? "none"}
+                      </span>
+                      <span className="text-xs text-slate-500">{row.signalTitle ?? "Baseline"}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
-                  return (
-                    <tr key={row.medicineId}>
-                      <td>
-                        <div className="space-y-1">
-                          <p className="font-medium text-slate-900">{row.medicineName}</p>
-                          <p className="text-xs leading-5 text-slate-400">
-                            Adjusted daily demand: {formatDecimal(row.adjustedDailyDemand)}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="text-slate-600">
-                        {formatDemandCategoryLabel(row.demandCategory)}
-                      </td>
-                      <td className="tabular-nums">{formatDecimal(row.baselineDailyDemand)}</td>
-                      <td className="tabular-nums">
-                        {row.activeUpliftPercentage > 0 ? `+${row.activeUpliftPercentage}%` : "—"}
-                      </td>
-                      <td className="tabular-nums">{formatDecimal(row.forecast7d)}</td>
-                      <td className="tabular-nums">{formatDaysOfStockLeft(row.daysOfStockLeft)}</td>
-                      <td>
-                        <span className={`app-badge ${getRiskClasses(row.daysOfStockLeft)}`}>
-                          <RiskIcon className="mr-1 h-3.5 w-3.5" />
-                          {getRiskLabel(row.daysOfStockLeft)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
-                          {row.confidenceLevel ?? "none"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="space-y-1">
-                          <p className="text-sm text-slate-700">
-                            {row.signalTitle ?? "Baseline recent-sales forecast"}
-                          </p>
-                          <p className="text-xs leading-5 text-slate-500">
-                            {row.signalExplanation ?? "No active local demand signal is changing this forecast right now."}
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="app-table">
+                <thead>
+                  <tr>
+                    <th>Medicine</th>
+                    <th>Category</th>
+                    <th>Baseline</th>
+                    <th>Uplift</th>
+                    <th>7d Forecast</th>
+                    <th>Cover</th>
+                    <th>Risk</th>
+                    <th>Confidence</th>
+                    <th>Signal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => {
+                    const RiskIcon = getRiskIcon(row.daysOfStockLeft);
+
+                    return (
+                      <tr key={row.medicineId}>
+                        <td>
+                          <div className="space-y-1">
+                            <p className="font-medium text-slate-900">{row.medicineName}</p>
+                          </div>
+                        </td>
+                        <td className="text-slate-600">
+                          {formatDemandCategoryLabel(row.demandCategory)}
+                        </td>
+                        <td className="tabular-nums">{formatDecimal(row.baselineDailyDemand)}</td>
+                        <td className="tabular-nums">
+                          {row.activeUpliftPercentage > 0 ? `+${row.activeUpliftPercentage}%` : "—"}
+                        </td>
+                        <td className="tabular-nums">{formatDecimal(row.forecast7d)}</td>
+                        <td className="tabular-nums">{formatDaysOfStockLeft(row.daysOfStockLeft)}</td>
+                        <td>
+                          <span className={`app-badge ${getRiskClasses(row.daysOfStockLeft)}`}>
+                            <RiskIcon className="mr-1 h-3.5 w-3.5" />
+                            {getRiskLabel(row.daysOfStockLeft)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`app-badge capitalize ${getConfidenceClasses(row.confidenceLevel)}`}>
+                            {row.confidenceLevel ?? "none"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="space-y-1">
+                            <p className="text-sm text-slate-700">
+                              {row.signalTitle ?? "Baseline"}
+                            </p>
+                            <p className="text-xs leading-5 text-slate-500">
+                              {row.signalExplanation ?? "No uplift."}
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </div>

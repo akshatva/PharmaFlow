@@ -20,7 +20,19 @@ function getAuthErrorMessage(errorMessage: string) {
     return "Your email is not confirmed yet. Open the verification email, then try signing in again.";
   }
 
+  if (normalized.includes("invalid login credentials")) {
+    return "Incorrect email or password. Please check your credentials and try again.";
+  }
+
+  if (normalized.includes("email rate limit exceeded")) {
+    return "Too many sign-in attempts. Please wait a few minutes before trying again.";
+  }
+
   return errorMessage;
+}
+
+function getAuthCallbackUrl() {
+  return `${window.location.origin}/auth/callback`;
 }
 
 export function AuthForm({ mode, nextPath }: AuthFormProps) {
@@ -51,13 +63,12 @@ export function AuthForm({ mode, nextPath }: AuthFormProps) {
         return;
       }
 
-      router.push(nextPath || "/onboarding");
+      router.push(nextPath || "/dashboard");
       router.refresh();
       return;
     }
 
-    const redirectUrl =
-      typeof window === "undefined" ? undefined : `${window.location.origin}/auth/callback`;
+    const redirectUrl = getAuthCallbackUrl();
 
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
@@ -159,13 +170,6 @@ export function AuthForm({ mode, nextPath }: AuthFormProps) {
         By continuing, you agree to keep your PharmaFlow workspace secure and restricted to
         authorized team members.
       </p>
-
-      {mode === "sign-up" ? (
-        <p className="text-sm leading-6 text-slate-500">
-          Your verification link returns through{" "}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[13px]">/auth/callback</code>.
-        </p>
-      ) : null}
     </form>
   );
 }

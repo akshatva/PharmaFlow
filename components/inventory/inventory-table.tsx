@@ -187,11 +187,7 @@ function ClearInventoryModal({
       <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
         <h3 className="text-xl font-semibold text-slate-900">Clear Inventory</h3>
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Are you sure? This will delete all inventory batches.
-        </p>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          This action only clears inventory batch rows for your organization. Medicines, suppliers,
-          and purchase orders will stay untouched.
+          This will delete all inventory batches for your organization.
         </p>
         <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {batchCount} batch{batchCount === 1 ? "" : "es"} will be deleted. Type <span className="font-semibold">DELETE</span> to confirm.
@@ -549,18 +545,9 @@ export function InventoryTable({
 
       <div className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <h3 className="text-lg font-semibold text-slate-900">Add inventory batch</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Create a new batch manually without re-uploading a CSV file.
-            </p>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Add batch</h3>
           </div>
-
-          {medicineOptions.length ? (
-            <p className="text-sm text-slate-500">
-              Tip: press Enter inside a field to submit once the form is complete.
-            </p>
-          ) : null}
         </div>
 
         {feedback.error ? (
@@ -678,7 +665,7 @@ export function InventoryTable({
             </button>
             {!medicineOptions.length ? (
               <span className="text-sm text-slate-500">
-                Add medicines through inventory import before creating manual batches.
+                Import inventory first to add medicines.
               </span>
             ) : null}
           </div>
@@ -689,10 +676,7 @@ export function InventoryTable({
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Inventory table</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Search, filter, and sort batches quickly for daily stock operations.
-              </p>
+              <h3 className="text-lg font-semibold text-slate-900">Inventory</h3>
             </div>
 
             <div className="flex w-full flex-col gap-3 xl:max-w-xl">
@@ -803,11 +787,13 @@ export function InventoryTable({
 
         {rows.length === 0 ? (
           <div className="app-empty-state mt-6">
-            No inventory has been imported yet. Upload a CSV file above to create your first batch records.
+            <h4 className="app-empty-title">No inventory batches</h4>
+            <p className="app-empty-copy">Import a CSV or add a batch above to get started.</p>
           </div>
         ) : filteredRows.length === 0 ? (
           <div className="app-empty-state mt-6">
-            <p>No inventory rows match your current search, filters, or sorting view.</p>
+            <h4 className="app-empty-title">No matching batches</h4>
+            <p className="app-empty-copy">Adjust your current filters to see more results.</p>
             <button
               type="button"
               onClick={resetInventoryView}

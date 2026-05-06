@@ -47,7 +47,7 @@ type InventoryBatchRecord = {
 
 function formatDateTime(value: string | null) {
   if (!value) {
-    return "No CSV import has refreshed inventory yet.";
+    return "No import yet";
   }
 
   return new Intl.DateTimeFormat("en-IN", {
@@ -189,8 +189,10 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
       <SectionIntro
         eyebrow="Operations"
         title="Inventory"
-        description="Upload and validate batch-based inventory data for your organization before importing it into PharmaFlow."
+        description="Manage stock, imports, and batches."
       />
+
+      <InventoryUpload />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="app-card p-5">
@@ -200,13 +202,10 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
             </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                Inventory freshness
+                Last import
               </p>
               <p className="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">
                 {formatDateTime(latestInventoryImportAt)}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                CSV imports use snapshot updates. Matching batches are refreshed, quantity is replaced, and missing batches stay unchanged.
               </p>
             </div>
           </div>
@@ -219,23 +218,16 @@ export default async function InventoryPage({ searchParams }: InventoryPageProps
             </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                Reporting
+                Export
               </p>
-              <p className="mt-1.5 text-sm font-semibold text-slate-900">
-                Export current inventory
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Download a snapshot for offline review, handoffs, and audit.
-              </p>
-              <div className="mt-3">
-                <ExportButton href="/api/exports/inventory" label="Export Inventory CSV" />
+              <div className="mt-2">
+                <ExportButton href="/api/exports/inventory" label="Export CSV" />
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <InventoryUpload />
       <MedicineDemandCategorySettings medicines={medicines ?? []} />
       <InventoryTable
         rows={inventoryRows}

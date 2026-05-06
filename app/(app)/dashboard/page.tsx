@@ -24,40 +24,28 @@ const quickActions = [
   {
     href: "/inventory",
     title: "Manage inventory",
-    description: "Add batches, fix quantities, and handle daily stock corrections.",
     icon: Boxes,
   },
   {
     href: "/alerts",
     title: "Review alerts",
-    description: "Low stock, near-expiry, and expired items needing attention.",
     icon: Bell,
   },
   {
     href: "/reorders",
     title: "Handle reorders",
-    description: "Turn insights into tracked reorder decisions and supplier actions.",
     icon: ClipboardList,
   },
   {
     href: "/purchase-orders",
     title: "Receive purchase orders",
-    description: "Move placed orders forward and bring received stock into batches.",
     icon: FileSpreadsheet,
   },
   {
     href: "/stock-adjustments",
     title: "Audit stock changes",
-    description: "Trace manual edits, deletions, and received stock history.",
     icon: History,
   },
-];
-
-const workflowChecks = [
-  "Use Inventory for the fastest daily add, edit, and delete workflow on batches.",
-  "Use Alerts when you want action-oriented low stock and expiry review instead of raw tables.",
-  "Use Reorders and Purchase Orders together when moving from insight to supplier execution.",
-  "Use Stock Adjustments when something looks off and you need a trustworthy trail.",
 ];
 
 export default async function DashboardPage() {
@@ -128,19 +116,19 @@ export default async function DashboardPage() {
   const fallbackUsed = !localWeather || weatherAwareSignals.length === 0;
   const weatherStatusMessage =
     weatherStatus === "missing_location"
-      ? `Live weather is inactive because the organization is missing ${missingLocationFields.join(", ")}. Add these in Settings > Pharmacy Location. Seasonal fallback is active.`
+      ? "Add pharmacy location to activate weather."
       : weatherStatus === "weather_unavailable"
-        ? `Live weather could not be loaded for ${formatWeatherLocationInput(organization ?? undefined)}. Seasonal fallback is active.`
+        ? "Weather unavailable. Seasonal signals active."
         : weatherStatus === "live_non_triggering"
-          ? `Live weather is available for ${localWeather?.locationName}, but no weather-specific rules are active right now. Seasonal signals are shown where relevant.`
-          : `Live weather is active for ${localWeather?.locationName}. Weather-aware demand signals are included below.`;
+          ? "Live weather active. No weather uplift."
+          : "Live weather active.";
 
   return (
     <div className="space-y-8">
       <SectionIntro
         eyebrow="Overview"
         title="Dashboard"
-        description="Operational home for inventory, alerts, forecast-aware reorders, and local demand context."
+        description="Command center."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -161,7 +149,6 @@ export default async function DashboardPage() {
                     <p className="text-sm font-semibold text-slate-900">{action.title}</p>
                     <ArrowRight className="h-3.5 w-3.5 text-slate-300 transition-colors group-hover:text-blue-500" />
                   </div>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-500">{action.description}</p>
                 </div>
               </div>
             </Link>
@@ -174,18 +161,10 @@ export default async function DashboardPage() {
       <section className="app-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Local demand signals</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Seasonal category signals, strengthened with live local weather when available.
-            </p>
-            {localWeather ? (
-              <p className="mt-2 text-xs font-medium text-slate-600">
-                Live weather: {localWeather.summary} in {localWeather.locationName}
-              </p>
-            ) : null}
+            <h3 className="text-sm font-semibold text-slate-900">Demand Signals</h3>
             {!hasRequiredWeatherLocation ? (
               <p className="mt-2 text-xs font-medium text-amber-700">
-                Add Pharmacy Location in Settings to activate live weather.
+                Location needed for weather.
               </p>
             ) : null}
           </div>
@@ -205,11 +184,11 @@ export default async function DashboardPage() {
           </div>
 
           {process.env.NODE_ENV === "development" ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Weather debug
-              </p>
-              <div className="mt-2 space-y-1 text-xs text-slate-600">
+            <details className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3">
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Diagnostics
+              </summary>
+              <div className="mt-3 space-y-1 text-xs text-slate-600">
                 <p>Org location used: {formatWeatherLocationInput(organization ?? undefined)}</p>
                 <p>
                   Missing required fields:{" "}
@@ -228,7 +207,7 @@ export default async function DashboardPage() {
                     : "none"}
                 </p>
               </div>
-            </div>
+            </details>
           ) : null}
 
           {localDemandSignals.length ? (
@@ -247,33 +226,15 @@ export default async function DashboardPage() {
                   <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
                     {signal.categoryLabel}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{signal.explanation}</p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="app-empty-state">
-              No active local demand signals for your current medicine categories this month.
+              <h4 className="app-empty-title">No active signals</h4>
+              <p className="app-empty-copy">There are no unusual demand patterns detected in your region.</p>
             </div>
           )}
-        </div>
-      </section>
-
-      <section className="app-card p-6">
-        <h3 className="text-sm font-semibold text-slate-900">Workflow guide</h3>
-        <p className="mt-1 text-sm text-slate-500">How each section fits into the daily operating rhythm.</p>
-        <div className="mt-4 space-y-2">
-          {workflowChecks.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-3 rounded-lg bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600"
-            >
-              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-600">
-                {index + 1}
-              </span>
-              <span>{item}</span>
-            </div>
-          ))}
         </div>
       </section>
     </div>

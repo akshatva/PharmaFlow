@@ -28,31 +28,33 @@ export type SalesCsvValidationResult = {
 
 type RawCsvRow = Record<string, unknown>;
 
+export const salesColumnAliases = {
+  medicine_name: ["medicine", "medicine_name", "product_name", "item_name"],
+  quantity_sold: ["quantity_sold", "qty", "quantity", "units", "sold_qty"],
+  sold_at: ["sold_at", "date", "sale_date", "sold_date", "timestamp", "created_at"],
+} satisfies Record<(typeof requiredSalesColumns)[number], string[]>;
+
 function trimCell(value: unknown) {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
 function normalizeHeader(value: string) {
-  return value.trim().toLowerCase();
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
 }
 
-const headerAliases: Record<string, string> = {
-  // quantity_sold
-  qty: "quantity_sold",
-  quantity: "quantity_sold",
-  units: "quantity_sold",
-  sold_qty: "quantity_sold",
-  // sold_at
-  date: "sold_at",
-  sale_date: "sold_at",
-  sold_date: "sold_at",
-  timestamp: "sold_at",
-  created_at: "sold_at",
-  // medicine_name
-  medicine: "medicine_name",
-  product_name: "medicine_name",
-  item_name: "medicine_name",
-};
+const headerAliases: Record<string, SupportedSalesColumn> = Object.entries(salesColumnAliases).reduce(
+  (accumulator, [canonical, aliases]) => {
+    aliases.forEach((alias) => {
+      accumulator[normalizeHeader(alias)] = canonical as SupportedSalesColumn;
+    });
+    return accumulator;
+  },
+  {} as Record<string, SupportedSalesColumn>,
+);
 
 function toNullableText(value: string) {
   return value ? value : null;
@@ -73,9 +75,28 @@ function normalizeSoldAt(value: string) {
 }
 
 function getRowValues(row: RawCsvRow) {
+  const normalizedRow = Object.entries(row).reduce(
+    (accumulator, [key, value]) => {
+      const normalizedKey = normalizeSalesCsvHeader(key);
+
+      if (supportedSalesColumns.includes(normalizedKey as SupportedSalesColumn)) {
+        const column = normalizedKey as SupportedSalesColumn;
+        const existingValue = trimCell(accumulator[column]);
+        const nextValue = trimCell(value);
+
+        if (!existingValue || nextValue) {
+          accumulator[column] = value;
+        }
+      }
+
+      return accumulator;
+    },
+    {} as Partial<Record<SupportedSalesColumn, unknown>>,
+  );
+
   return supportedSalesColumns.reduce(
     (accumulator, column) => {
-      accumulator[column] = trimCell(row[column]);
+      accumulator[column] = trimCell(normalizedRow[column]);
       return accumulator;
     },
     {} as Record<SupportedSalesColumn, string>,
@@ -86,7 +107,7 @@ export function validateSalesCsvRows(
   rows: RawCsvRow[],
   headers: string[],
 ): SalesCsvValidationResult {
-  const normalizedHeaders = headers.map(normalizeHeader);
+  const normalizedHeaders = Array.from(new Set(headers.map(normalizeSalesCsvHeader)));
   const missingColumns = requiredSalesColumns.filter(
     (column) => !normalizedHeaders.includes(column),
   );

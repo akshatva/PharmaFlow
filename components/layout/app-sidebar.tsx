@@ -13,7 +13,6 @@ import {
   Truck,
   FileSpreadsheet,
   History,
-  ScanLine,
   Lightbulb,
 } from "lucide-react";
 
@@ -23,7 +22,6 @@ import { cn } from "@/lib/utils";
 const icons: Record<string, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
   forecast: BarChart3,
-  scan: ScanLine,
   inventory: Boxes,
   sales: ShoppingCart,
   insights: Lightbulb,
@@ -42,7 +40,7 @@ const navGroups = [
   },
   {
     label: "Operations",
-    items: ["inventory", "scan", "sales", "alerts"],
+    items: ["inventory", "sales", "alerts"],
   },
   {
     label: "Supply Chain",
@@ -64,7 +62,7 @@ export function AppSidebar() {
   return (
     <>
       {/* Mobile nav */}
-      <div className="border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
+      <div className="border-b border-slate-200 bg-white px-4 py-2.5 lg:hidden">
         <Link href="/" className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white">
             PF
@@ -72,7 +70,7 @@ export function AppSidebar() {
           <span className="text-sm font-semibold text-slate-900">PharmaFlow</span>
         </Link>
 
-        <nav className="-mx-4 mt-3 overflow-x-auto px-4 pb-1">
+        <nav className="-mx-4 mt-2.5 overflow-x-auto px-4 pb-1 scrollbar-none">
           <div className="flex w-max gap-1.5">
             {appNavigation.map((item) => {
               const Icon = icons[item.icon] ?? LayoutDashboard;
@@ -99,7 +97,7 @@ export function AppSidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <aside className="hidden h-screen flex-col border-r border-slate-800/50 bg-sidebar lg:sticky lg:top-0 lg:flex">
+      <aside className="hidden h-dvh w-[260px] flex-col border-r border-slate-800/50 bg-sidebar lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-3 px-5 py-5 transition-opacity hover:opacity-80">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-xs font-bold text-white shadow-sm">

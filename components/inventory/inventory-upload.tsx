@@ -7,8 +7,6 @@ import type { InventoryImportState } from "@/app/(app)/inventory/actions";
 import { importInventoryCsv } from "@/app/(app)/inventory/actions";
 import {
   normalizeInventoryCsvHeader,
-  optionalInventoryColumns,
-  requiredInventoryColumns,
   supportedInventoryColumns,
   validateInventoryCsvRows,
   type InventoryPreviewRow,
@@ -199,48 +197,9 @@ export function InventoryUpload() {
             <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
               Inventory import
             </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Upload batch-based inventory data, validate it before import, and keep repeated refreshes predictable for your team.
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              CSV with columns: <code className="text-slate-700">medicine_name</code>, <code className="text-slate-700">batch_number</code>, <code className="text-slate-700">quantity</code>, <code className="text-slate-700">expiry_date</code>. Existing batches update automatically.
             </p>
-            <div className="mt-4 grid gap-3 lg:grid-cols-[1.3fr_1fr]">
-              <div className="app-card-muted px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Required columns
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-700">
-                  <code>medicine_name</code>, <code>batch_number</code>, <code>quantity</code>,{" "}
-                  <code>expiry_date</code>
-                </p>
-              </div>
-              <div className="app-card-muted px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Optional columns
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-700">
-                  {optionalInventoryColumns.map((column, index) => (
-                    <span key={column}>
-                      <code>{column}</code>
-                      {index < optionalInventoryColumns.length - 1 ? ", " : ""}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            </div>
-            <div className="app-card-muted mt-4 px-4 py-3 text-sm leading-6 text-slate-600">
-              Use a comma-separated file with one header row. Dates work best in <code>YYYY-MM-DD</code>{" "}
-              format. Common header variations like <code>qty</code>, <code>expiry</code>, and{" "}
-              <code>batch no</code> are accepted automatically when they clearly map to the expected columns.
-            </div>
-            <div className="app-panel-info mt-4">
-              Matching batches are updated using snapshot logic. If a row matches the same medicine
-              and batch number, PharmaFlow replaces the stored quantity and batch details with the
-              uploaded values. Quantity is replaced, not added, and batches missing from the file
-              are not deleted.
-            </div>
-            <div className="app-panel-warning mt-4">
-              CSV is the only working import format right now. PDF and image files can be selected,
-              but extraction is not implemented yet in this pass.
-            </div>
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -265,8 +224,8 @@ export function InventoryUpload() {
 
         <div className="mt-5 space-y-3">
           {fileName ? (
-            <p className="app-card-muted px-4 py-3 text-sm text-slate-600">
-              Selected file: <span className="font-medium text-slate-900">{fileName}</span>
+            <p className="text-sm text-slate-600">
+              File: <span className="font-medium text-slate-900">{fileName}</span>
             </p>
           ) : null}
 
@@ -294,27 +253,18 @@ export function InventoryUpload() {
 
           {(importState.success || importState.error) && importState.totalParsedRows > 0 ? (
             <div className="app-card-muted p-4">
-              <p className="text-sm font-medium text-slate-900">Last import result</p>
-              <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
-                <SummaryStat label="Rows parsed" value={importState.totalParsedRows} />
-                <SummaryStat label="Rows imported" value={importState.importedRowsCount} />
-                <SummaryStat label="Rows rejected" value={importState.invalidRowsCount} />
-                <SummaryStat label="Skipped empty" value={importState.skippedEmptyRows} />
-                <SummaryStat label="New batches created" value={importState.newBatchesCreated} />
-                <SummaryStat label="Batches updated" value={importState.existingBatchesUpdated} />
-                <SummaryStat label="New medicines created" value={importState.newMedicinesCreated} />
-                <SummaryStat label="Medicines reused" value={importState.medicinesReused} />
+              <p className="text-sm font-medium text-slate-900">Import summary</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <SummaryStat label="Imported" value={importState.importedRowsCount} />
+                <SummaryStat label="Rejected" value={importState.invalidRowsCount} />
+                <SummaryStat label="New batches" value={importState.newBatchesCreated} />
+                <SummaryStat label="Updated" value={importState.existingBatchesUpdated} />
               </div>
             </div>
           ) : null}
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-4">
-          <SummaryStat label="Preview rows" value={previewRows.length} />
-          <SummaryStat label="Valid rows" value={validRows.length} />
-          <SummaryStat label="Invalid rows" value={rejectedRowsCount} />
-          <SummaryStat label="Skipped empty" value={skippedEmptyRows} />
-        </div>
+
 
         <form action={importAction} className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <input type="hidden" name="rowsJson" value={JSON.stringify(validRows)} />
@@ -326,37 +276,31 @@ export function InventoryUpload() {
             label={isPending ? "Importing..." : "Import inventory"}
           />
           {!fileName ? (
-            <span className="text-sm text-slate-500">Choose a file to begin. CSV is currently required for import.</span>
+            <span className="text-sm text-slate-500">Select a CSV to begin.</span>
           ) : !canImport ? (
             <span className="text-sm text-slate-500">
-              No valid rows available. Fix validation issues before importing.
+              Fix issues above before importing.
             </span>
           ) : rejectedRowsCount > 0 ? (
             <span className="text-sm text-slate-500">
-              {validRows.length} valid row{validRows.length === 1 ? "" : "s"} will import using snapshot updates.{" "}
-              {rejectedRowsCount} invalid row{rejectedRowsCount === 1 ? "" : "s"} will be rejected.
+              {validRows.length} valid, {rejectedRowsCount} skipped.
             </span>
           ) : (
             <span className="text-sm text-slate-500">
-              Ready to import {validRows.length} validated row
-              {validRows.length === 1 ? "" : "s"} using snapshot updates for matching batches.
+              {validRows.length} row{validRows.length === 1 ? "" : "s"} ready.
             </span>
           )}
         </form>
       </div>
 
       <div className="app-card p-5 sm:p-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="app-kicker">Validation preview</p>
-            <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Preview</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Rows are trimmed, empty lines are skipped, and row-level issues are shown before import.
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">Preview</h3>
+          {previewRows.length > 0 ? (
+            <p className="mt-1 text-sm text-slate-500">
+              {previewRows.length - invalidRows.length} valid, {invalidRows.length} invalid of {previewRows.length} row{previewRows.length === 1 ? "" : "s"}.
             </p>
-          </div>
-          <div className="app-card-muted px-4 py-3 text-sm text-slate-600">
-            Expected columns: {supportedInventoryColumns.join(", ")}
-          </div>
+          ) : null}
         </div>
 
         {previewRows.length ? (
@@ -467,7 +411,8 @@ export function InventoryUpload() {
           </>
         ) : (
           <div className="app-empty-state mt-6">
-            No rows to preview yet. Upload a CSV file to validate and inspect the data before importing it.
+            <h4 className="app-empty-title">Ready for validation</h4>
+            <p className="app-empty-copy">Upload a CSV to preview batch data before importing.</p>
           </div>
         )}
       </div>

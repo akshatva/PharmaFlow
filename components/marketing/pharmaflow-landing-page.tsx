@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertTriangle, LineChart, SearchCheck, Menu, X, ChevronRight } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import DotPattern from "@/components/ui/dot-pattern-1";
 import { Hero } from "@/components/ui/animated-hero";
 import { UpgradeBanner } from "@/components/ui/upgrade-banner";
@@ -15,7 +15,7 @@ import { LiquidGlassBar } from "@/components/ui/liquid-glass-bar";
 import { PharmaFlowLogo } from "@/components/ui/pharma-flow-logo";
 
 // Animation variants
-const fadeIn = {
+const fadeIn: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: {
     opacity: 1,
@@ -24,7 +24,7 @@ const fadeIn = {
   },
 };
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,

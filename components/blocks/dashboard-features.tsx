@@ -6,7 +6,7 @@ export function DashboardFeatures() {
         <section className="bg-transparent py-8">
             <div className="mx-auto max-w-full">
                 <div className="relative">
-                    <div className="relative z-10 grid grid-cols-6 gap-4">
+                    <div className="relative z-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
                         <Card className="relative col-span-full flex overflow-hidden lg:col-span-2 border-slate-200 shadow-sm bg-white">
                             <CardContent className="relative m-auto size-fit pt-6 text-center">
                                 <div className="relative flex h-24 w-56 items-center">
@@ -19,7 +19,6 @@ export function DashboardFeatures() {
                                     <span className="mx-auto block w-fit text-5xl font-semibold text-slate-900 leading-tight">100%</span>
                                 </div>
                                 <h2 className="mt-6 text-2xl font-semibold text-slate-900 tracking-tight">Inventory visibility</h2>
-                                <p className="mt-2 text-sm text-slate-500">Stay close to current stock, batches, and movement history without leaving the operations workflow.</p>
                             </CardContent>
                         </Card>
                         
@@ -30,7 +29,6 @@ export function DashboardFeatures() {
                                 </div>
                                 <div className="relative z-10 mt-8 space-y-2">
                                     <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Demand signals</h2>
-                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Use seasonal and weather-aware context to understand which categories may need extra attention.</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -42,7 +40,6 @@ export function DashboardFeatures() {
                                 </div>
                                 <div className="relative z-10 mt-8 space-y-2">
                                     <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Reorder guidance</h2>
-                                    <p className="text-sm text-slate-500 leading-relaxed px-2">Combine recent sales, forecast coverage, and demand uplift into clearer reorder decisions.</p>
                                 </div>
                             </CardContent>
                         </Card>
@@ -55,7 +52,6 @@ export function DashboardFeatures() {
                                     </div>
                                     <div className="space-y-2">
                                         <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Audit trail</h2>
-                                        <p className="text-sm text-slate-500 leading-relaxed">Track manual stock changes, received orders, and operational corrections with less guesswork.</p>
                                     </div>
                                 </div>
                                 <div className="relative -mb-6 -mr-6 mt-6 h-fit border-l border-t border-slate-100 p-6 bg-slate-50/50 rounded-tl-3xl shadow-sm">
@@ -81,7 +77,6 @@ export function DashboardFeatures() {
                                     </div>
                                     <div className="space-y-2">
                                         <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Operational handoff</h2>
-                                        <p className="text-sm text-slate-500 leading-relaxed">Move from alerts to reorders and purchase action without losing context between screens.</p>
                                     </div>
                                 </div>
                                 <div className="relative mt-6 flex h-full flex-col justify-center space-y-4 py-6 border-l border-slate-100 bg-slate-50/30">

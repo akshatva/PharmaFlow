@@ -16,7 +16,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 function AlertsSection({
   title,
   description,
-  emptyText,
+  emptyTitle,
+  emptyDescription,
   rows,
   renderReason,
   pendingReorderMedicineIds,
@@ -25,7 +26,8 @@ function AlertsSection({
 }: {
   title: string;
   description: string;
-  emptyText: string;
+  emptyTitle: string;
+  emptyDescription: string;
   rows: AlertRow[];
   renderReason: (row: AlertRow) => string;
   pendingReorderMedicineIds: Set<string>;
@@ -34,14 +36,20 @@ function AlertsSection({
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div>
-        <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        <span className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+          {rows.length} item{rows.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       {rows.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-          {emptyText}
+        <div className="app-empty-state mt-6">
+          <h4 className="app-empty-title">{emptyTitle}</h4>
+          <p className="app-empty-copy">{emptyDescription}</p>
         </div>
       ) : (
         <>
@@ -72,7 +80,9 @@ function AlertsSection({
                     {showDaysLeft ? (
                       <div>
                         <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Days left</p>
-                        <p className="mt-1 text-sm text-slate-700">{getDaysUntilExpiry(row.expiryDate)}</p>
+                        <p className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                          {getDaysUntilExpiry(row.expiryDate)}
+                        </p>
                       </div>
                     ) : null}
                   </div>
@@ -129,8 +139,10 @@ function AlertsSection({
                     <td className="text-slate-700">
                       {row.batchNumber}
                     </td>
-                    <td className="text-slate-700">
-                      {row.quantity}
+                    <td>
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        Qty {row.quantity}
+                      </span>
                     </td>
                     {showExpiry ? (
                       <td className="text-slate-700">
@@ -138,8 +150,10 @@ function AlertsSection({
                       </td>
                     ) : null}
                     {showDaysLeft ? (
-                      <td className="text-slate-700">
-                        {getDaysUntilExpiry(row.expiryDate)}
+                      <td>
+                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                          {getDaysUntilExpiry(row.expiryDate)}
+                        </span>
                       </td>
                     ) : null}
                     {!showExpiry ? (
@@ -147,8 +161,10 @@ function AlertsSection({
                         {row.sku || "—"}
                       </td>
                     ) : null}
-                    <td className="max-w-[280px] text-slate-600">
-                      {renderReason(row)}
+                    <td className="max-w-[300px]">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+                        {renderReason(row)}
+                      </div>
                     </td>
                     <td>
                       <div className="flex flex-wrap items-center gap-3">
@@ -210,11 +226,11 @@ export default async function AlertsPage() {
           <SectionIntro
             eyebrow="Attention"
             title="Alerts"
-            description="Operational items that need attention now, using the same stock and expiry rules already powering PharmaFlow inventory insights."
+            description="Stock and expiry items that need review."
           />
           <SetupNotice
-            title="Reorder workflow needs database setup"
-            description="The `reorder_items` table is missing in your connected Supabase project, so Alerts can’t load reorder-aware actions yet. Run the reorder_items SQL in Supabase, reload the schema, and refresh the app."
+            title="Reorders not ready"
+            description="Apply the reorder migration and refresh."
           />
         </div>
       );
@@ -232,31 +248,31 @@ export default async function AlertsPage() {
       <SectionIntro
         eyebrow="Attention"
         title="Alerts"
-        description="Operational items that need attention now, using the same stock and expiry rules already powering PharmaFlow inventory insights."
+        description="Stock and expiry items that need review."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <div className="rounded-3xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
             Low Stock
           </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-amber-950">
             {snapshot.lowStockRows.length}
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <div className="rounded-3xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
             Near Expiry
           </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-blue-950">
             {snapshot.nearExpiryRows.length}
           </p>
         </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 xl:col-span-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+        <div className="rounded-3xl border border-red-200 bg-red-50/60 p-5 shadow-sm sm:col-span-2 xl:col-span-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-700">
             Expired
           </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-red-950">
             {snapshot.expiredRows.length}
           </p>
         </div>
@@ -264,8 +280,9 @@ export default async function AlertsPage() {
 
       <AlertsSection
         title="Low stock items"
-        description="Batches with quantity below 20. These are good candidates for reorder action."
-        emptyText="No low stock items right now."
+        description="Batches below the reorder attention threshold."
+        emptyTitle="Healthy stock levels"
+        emptyDescription="No batches are currently below their minimum threshold."
         rows={snapshot.lowStockRows}
         renderReason={(row) => `Low stock: batch ${row.batchNumber} is below threshold`}
         pendingReorderMedicineIds={snapshot.pendingReorderMedicineIds}
@@ -273,8 +290,9 @@ export default async function AlertsPage() {
 
       <AlertsSection
         title="Near expiry items"
-        description="Batches expiring within the next 90 days."
-        emptyText="No near-expiry items right now."
+        description="Batches approaching expiry."
+        emptyTitle="No expiry risks"
+        emptyDescription="All batches have healthy shelf lives remaining."
         rows={snapshot.nearExpiryRows}
         renderReason={(row) =>
           `Near expiry: batch ${row.batchNumber} expires on ${formatAlertDate(row.expiryDate)}`
@@ -286,8 +304,9 @@ export default async function AlertsPage() {
 
       <AlertsSection
         title="Expired items"
-        description="Batches already past expiry and needing operational review."
-        emptyText="No expired batches detected."
+        description="Batches past expiry."
+        emptyTitle="No expired stock"
+        emptyDescription="There are no expired batches in your inventory."
         rows={snapshot.expiredRows}
         renderReason={(row) =>
           `Expired stock: batch ${row.batchNumber} expired on ${formatAlertDate(row.expiryDate)}`

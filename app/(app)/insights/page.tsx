@@ -14,7 +14,6 @@ import {
   type InsightWorkflowType,
 } from "@/services/insights";
 import {
-  REORDER_TRANSPARENCY_COPY,
   isDemandCategory,
   getRulesBasedReorderDecision,
 } from "@/services/inventory";
@@ -191,12 +190,14 @@ function SummaryCard({
 function InsightSection({
   title,
   description,
-  emptyText,
+  emptyTitle,
+  emptyDescription,
   children,
 }: {
   title: string;
   description: string;
-  emptyText: string;
+  emptyTitle: string;
+  emptyDescription: string;
   children: React.ReactNode;
 }) {
   const hasContent = Boolean(children);
@@ -213,7 +214,8 @@ function InsightSection({
           <div>{children}</div>
         ) : (
           <div className="app-empty-state">
-            {emptyText}
+            <h4 className="app-empty-title">{emptyTitle}</h4>
+            <p className="app-empty-copy">{emptyDescription}</p>
           </div>
         )}
       </div>
@@ -769,11 +771,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
           <SectionIntro
             eyebrow="Visibility"
             title="Insights"
-            description="Movement-based inventory signals using current stock and the last 30 days of sales activity."
+            description="Inventory signals."
           />
           <SetupNotice
-            title="Insight workflow setup is missing"
-            description="The `insight_workflow_items` table is missing in your connected Supabase project. Run the workflow SQL migration, reload the schema, and refresh the app."
+            title="Workflow setup missing"
+            description="Apply the workflow migration and refresh."
           />
         </div>
       );
@@ -785,11 +787,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
           <SectionIntro
             eyebrow="Visibility"
             title="Insights"
-            description="Movement-based inventory signals using current stock and the last 30 days of sales activity."
+            description="Inventory signals."
           />
           <SetupNotice
-            title="Reorder table not available yet"
-            description="Insights can still calculate movement signals, but the reorder action layer depends on the `reorder_items` table. Run the reorder_items SQL in Supabase, reload the schema, and refresh the app."
+            title="Reorders not ready"
+            description="Apply the reorder migration and refresh."
           />
         </div>
       );
@@ -858,12 +860,12 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
   const fallbackUsed = !localWeather || weatherAwareSignals.length === 0;
   const weatherStatusMessage =
     weatherStatus === "missing_location"
-      ? `Live weather is inactive because the organization is missing ${missingLocationFields.join(", ")}. Seasonal fallback is active.`
+      ? "Add pharmacy location to activate weather."
       : weatherStatus === "weather_unavailable"
-        ? `Live weather could not be loaded for ${formatWeatherLocationInput(organization ?? undefined)}. Seasonal fallback is active.`
+        ? "Weather unavailable. Seasonal signals active."
         : weatherStatus === "live_non_triggering"
-          ? `Live weather is available for ${localWeather?.locationName}, but no weather-specific rules are active right now. Seasonal signals are shown where relevant.`
-          : `Live weather is active for ${localWeather?.locationName}. Weather-aware demand signals are included below.`;
+          ? "Live weather active. No weather uplift."
+          : "Live weather active.";
 
   const medicinesWithStock = insights.filter((row) => row.currentStock > 0);
 
@@ -1117,22 +1119,21 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
       <SectionIntro
         eyebrow="Visibility"
         title="Insights"
-        description="Movement-based inventory signals using current stock, batch expiry, and the last 30 days of sales activity."
+        description="Inventory signals."
       />
       <div className="flex flex-wrap items-center gap-3">
         <ExportButton href="/api/exports/low-stock" label="Export Low Stock Report" />
         <ExportButton href="/api/exports/expiry" label="Export Expiry Report" />
       </div>
       <div className="app-panel-info">
-        Inventory data last updated on{" "}
-        <span className="font-medium">{formatDateTime(latestInventoryImportAt)}</span>.
-        Sales-based insights and reorder signals are based on the last 30 days of sales.
+        Updated <span className="font-medium">{formatDateTime(latestInventoryImportAt)}</span>.
       </div>
 
       <InsightSection
-        title="Local demand signals"
-        description="Simple demand indicators based on the current month, your pharmacy location, live weather when available, and medicine demand categories."
-        emptyText="No active local demand signals are available for your current medicine categories this month."
+        title="Demand Signals"
+        description="Demand shifts."
+        emptyTitle="No active signals"
+        emptyDescription="There are no unusual demand patterns detected in your region."
       >
         <div className="space-y-4">
           <div
@@ -1149,7 +1150,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
           {localWeather ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-                Live weather context
+                Weather
               </p>
               <p className="mt-1 text-sm text-slate-700">
                 {localWeather.summary} in {localWeather.locationName}
@@ -1157,11 +1158,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
             </div>
           ) : null}
           {process.env.NODE_ENV === "development" ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Weather debug
-              </p>
-              <div className="mt-2 space-y-1 text-xs text-slate-600">
+            <details className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3">
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Weather diagnostics
+              </summary>
+              <div className="mt-3 space-y-1 text-xs text-slate-600">
                 <p>Org location used: {formatWeatherLocationInput(organization ?? undefined)}</p>
                 <p>
                   Missing required fields:{" "}
@@ -1180,7 +1181,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                     : "none"}
                 </p>
               </div>
-            </div>
+            </details>
           ) : null}
           {localDemandSignals.length ? (
             <div className="grid gap-4 lg:grid-cols-2">
@@ -1198,50 +1199,45 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                   <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
                     {signal.categoryLabel}
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{signal.explanation}</p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="app-empty-state">
-              No active local demand signals are available for your current medicine categories this month.
+              No active demand signals.
             </div>
           )}
         </div>
       </InsightSection>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <SummaryCard
           label="At-Risk Value"
           value={formatCurrency(atRiskInventoryValue)}
-          helperText="Near-expiry or slow-moving stock, by purchase price."
         />
         <SummaryCard
           label="Stockout Risk"
           value={stockRunOutSoonCount}
-          helperText="Medicines likely to run out soon."
         />
         <SummaryCard
           label="Reorder Needed"
           value={reorderRecommendationCount}
-          helperText="Positive reorder quantity items."
         />
         <SummaryCard
           label="Needs Attention"
           value={actionableInsightCount}
-          helperText="Open workflow items."
         />
         <SummaryCard
-          label="Last Updated"
+          label="Updated"
           value={formatDateTime(latestInventoryImportAt)}
-          helperText="Latest CSV import refresh."
         />
       </div>
 
       <InsightSection
         title="Needs attention"
-        description="Top priority items are sorted by urgency so your team can move through the most important stockout, expiry, and reorder issues first."
-        emptyText="No priority items are currently available."
+        description="Priority work."
+        emptyTitle="All caught up"
+        emptyDescription="There are no priority insights that require your attention right now."
       >
         {priorityItems.length ? (
           <div className="space-y-4">
@@ -1348,7 +1344,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
               </div>
             ) : (
               <div className="app-empty-state">
-                No priority items match the current workflow filter.
+                No matching items.
               </div>
             )}
           </div>
@@ -1357,8 +1353,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
       <InsightSection
         title="Stockout risk"
-        description="Medicines most likely to run short soon, sorted by the lowest remaining days of cover."
-        emptyText="No stockout risk items are currently flagged."
+        description="Lowest cover first."
+        emptyTitle="Healthy stock cover"
+        emptyDescription="No medicines are currently at risk of stocking out."
       >
         {stockoutRiskRows.length ? (
           <div className="app-table-shell">
@@ -1367,11 +1364,11 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
               <thead>
                 <tr>
                   <th>Medicine</th>
-                  <th>Current Stock</th>
-                  <th>Avg Daily Sales</th>
-                  <th>Days of Stock Left</th>
+                  <th>Stock</th>
+                  <th>Daily Sales</th>
+                  <th>Cover</th>
                   <th>Priority</th>
-                  <th>Reason</th>
+                  <th>Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -1399,7 +1396,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                       </span>
                     </td>
                     <td>
-                      {`Stock will run out in ${formatDaysOfStockLeft(row.daysOfStockLeft)}.`}
+                      {`${formatDaysOfStockLeft(row.daysOfStockLeft)} cover.`}
                     </td>
                   </tr>
                 ))}
@@ -1412,8 +1409,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
       <InsightSection
         title="Near expiry"
-        description="Batches with the shortest expiry horizon, including expired stock and batches that should be moved first."
-        emptyText="No near-expiry items are currently flagged."
+        description="Shortest expiry first."
+        emptyTitle="No expiry risks"
+        emptyDescription="All inventory batches have healthy shelf lives remaining."
       >
         {nearExpiryRows.length ? (
           <div className="app-table-shell">
@@ -1424,9 +1422,9 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                   <th>Medicine</th>
                   <th>Batch</th>
                   <th>Quantity</th>
-                  <th>Expiry Date</th>
+                  <th>Expiry</th>
                   <th>Priority</th>
-                  <th>Reason</th>
+                  <th>Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -1453,8 +1451,8 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                     </td>
                     <td>
                       {row.daysUntilExpiry < 0
-                        ? `Expired with ${row.quantity} units still in stock.`
-                        : `Expires in ${row.daysUntilExpiry} day${row.daysUntilExpiry === 1 ? "" : "s"} with ${row.quantity} units remaining.`}
+                        ? `Expired · ${row.quantity} units`
+                        : `${row.daysUntilExpiry}d · ${row.quantity} units`}
                     </td>
                   </tr>
                 ))}
@@ -1467,28 +1465,23 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
 
       <InsightSection
         title="Reorder suggestions"
-        description="Rules-based reorder guidance using current stock and the last 30 days of sales activity."
-        emptyText="No reorder suggestions are needed right now."
+        description="Reorder guidance."
+        emptyTitle="No reorders needed"
+        emptyDescription="Current inventory levels meet or exceed forecasted demand."
       >
         {reorderSuggestions.length ? (
           <div className="space-y-4">
-            <div className="app-panel-info">
-              {REORDER_TRANSPARENCY_COPY} Matching rows use a simple stock-cover rule. If there are
-              no sales in the last 30 days, PharmaFlow shows “Not enough recent sales data” instead
-              of a precise reorder quantity.
-            </div>
-
             <div className="app-table-shell">
               <div className="overflow-x-auto">
                 <table className="app-table">
                   <thead>
                     <tr>
                       <th>Medicine</th>
-                      <th>Days of Stock Left</th>
+                      <th>Cover</th>
                       <th>Status</th>
                       <th>Recommendation</th>
-                      <th>Recommended Reorder</th>
-                      <th>Reason</th>
+                      <th>Quantity</th>
+                      <th>Note</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -1504,8 +1497,6 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                                 {row.demandSignalTitle?.toLowerCase()}
                               </p>
                             ) : null}
-                            <p className="text-xs text-slate-500">{row.reason}</p>
-                            <p className="text-xs text-slate-500">{row.confidenceNote}</p>
                           </div>
                         </td>
                         <td>
@@ -1551,7 +1542,7 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
                         </td>
                         <td>
                           {!row.actionable ? (
-                            <span className="text-xs font-medium text-slate-500">No action recommended</span>
+                            <span className="text-xs font-medium text-slate-500">No action</span>
                           ) : (
                             <ReorderButton
                               medicineId={row.id}

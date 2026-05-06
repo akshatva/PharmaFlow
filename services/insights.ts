@@ -115,50 +115,50 @@ export function getLocalDemandSignals({
     categorySet.has("hydration") && isMonthInRange(month, [3, 4, 5, 6])
       ? {
           id: "hydration-summer",
-          title: "Hot season demand may rise",
+          title: "Hydration uplift",
           category: "hydration",
           upliftPercentage: 18,
-          explanation: `Hydration products often move faster during hotter months in ${locationLabel}.`,
+          explanation: `Hot season signal in ${locationLabel}.`,
           source: "seasonal",
         }
       : null,
     categorySet.has("gastro") && isMonthInRange(month, [7, 8, 9])
       ? {
           id: "gastro-monsoon",
-          title: "Monsoon gastro demand signal",
+          title: "Gastro uplift",
           category: "gastro",
           upliftPercentage: 16,
-          explanation: `Gastro-related demand can lift during monsoon periods, so keep a closer watch in ${locationLabel}.`,
+          explanation: `Monsoon season signal in ${locationLabel}.`,
           source: "seasonal",
         }
       : null,
     categorySet.has("fever_flu") && isMonthInRange(month, [7, 8, 9, 11, 12, 1, 2])
       ? {
           id: "fever-flu-seasonal",
-          title: "Seasonal fever and flu watch",
+          title: "Fever & flu uplift",
           category: "fever_flu",
           upliftPercentage: isMonthInRange(month, [11, 12, 1, 2]) ? 20 : 14,
-          explanation: `Fever and flu medicines often see stronger movement in monsoon and winter months around ${locationLabel}.`,
+          explanation: `Seasonal fever and flu signal in ${locationLabel}.`,
           source: "seasonal",
         }
       : null,
     categorySet.has("respiratory") && isMonthInRange(month, [11, 12, 1, 2])
       ? {
           id: "respiratory-winter",
-          title: "Winter respiratory demand signal",
+          title: "Respiratory uplift",
           category: "respiratory",
           upliftPercentage: 17,
-          explanation: `Respiratory medicines can move faster during cooler flu-prone months in ${locationLabel}.`,
+          explanation: `Winter respiratory signal in ${locationLabel}.`,
           source: "seasonal",
         }
       : null,
     categorySet.has("allergy") && isMonthInRange(month, [2, 3, 4])
       ? {
           id: "allergy-seasonal",
-          title: "Light seasonal allergy uplift",
+          title: "Allergy uplift",
           category: "allergy",
           upliftPercentage: 10,
-          explanation: `Allergy demand can pick up modestly during seasonal transitions, so this category is worth monitoring.`,
+          explanation: "Seasonal transition signal.",
           source: "seasonal",
         }
       : null,
@@ -167,50 +167,50 @@ export function getLocalDemandSignals({
     weather?.isHot && categorySet.has("hydration")
       ? {
           id: "hydration-weather-hot",
-          title: "Heat conditions may lift hydration demand",
+          title: "Hydration uplift",
           category: "hydration",
           upliftPercentage: 22,
-          explanation: `Heat conditions in ${weather.locationName || locationLabel} may increase hydration demand.`,
+          explanation: `Heat signal in ${weather.locationName || locationLabel}.`,
           source: "weather",
         }
       : null,
     (weather?.isRainy || weather?.isHumid) && categorySet.has("gastro")
       ? {
           id: "gastro-weather-rain",
-          title: "Rainy conditions may raise gastro demand",
+          title: "Gastro uplift",
           category: "gastro",
           upliftPercentage: 18,
-          explanation: `Rain or high humidity in ${weather?.locationName || locationLabel} may increase gastro demand.`,
+          explanation: `Rain or humidity signal in ${weather?.locationName || locationLabel}.`,
           source: "weather",
         }
       : null,
     (weather?.isRainy || weather?.isHumid) && categorySet.has("fever_flu")
       ? {
           id: "fever-flu-weather-rain",
-          title: "Rainy conditions may raise fever and flu demand",
+          title: "Fever & flu uplift",
           category: "fever_flu",
           upliftPercentage: 16,
-          explanation: `Rainy or humid conditions in ${weather?.locationName || locationLabel} may increase fever and flu demand.`,
+          explanation: `Rain or humidity signal in ${weather?.locationName || locationLabel}.`,
           source: "weather",
         }
       : null,
     weather?.isCold && categorySet.has("respiratory")
       ? {
           id: "respiratory-weather-cold",
-          title: "Cool conditions may raise respiratory demand",
+          title: "Respiratory uplift",
           category: "respiratory",
           upliftPercentage: 18,
-          explanation: `Cool conditions in ${weather.locationName || locationLabel} may increase respiratory demand.`,
+          explanation: `Cold weather signal in ${weather.locationName || locationLabel}.`,
           source: "weather",
         }
       : null,
     weather?.isCold && categorySet.has("fever_flu")
       ? {
           id: "fever-flu-weather-cold",
-          title: "Cool conditions may raise fever and flu demand",
+          title: "Fever & flu uplift",
           category: "fever_flu",
           upliftPercentage: 17,
-          explanation: `Cool conditions in ${weather.locationName || locationLabel} may increase fever and flu demand.`,
+          explanation: `Cold weather signal in ${weather.locationName || locationLabel}.`,
           source: "weather",
         }
       : null,
@@ -243,7 +243,7 @@ export function getLocalDemandSignals({
       upliftPercentage: Math.max(existing.upliftPercentage, signal.upliftPercentage),
       explanation:
         existing.source === "seasonal"
-          ? `${signal.explanation} Seasonal timing also supports keeping this category on watch.`
+          ? `${signal.explanation} Seasonal support active.`
           : signal.explanation,
       source: "seasonal_weather",
     });

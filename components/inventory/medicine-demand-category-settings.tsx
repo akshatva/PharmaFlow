@@ -59,16 +59,9 @@ export function MedicineDemandCategorySettings({
   return (
     <section className="app-card p-5">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-          Demand category
-        </p>
-        <h3 className="mt-1.5 text-lg font-semibold tracking-tight text-slate-900">
-          Medicine demand category
+        <h3 className="text-lg font-semibold tracking-tight text-slate-900">
+          Demand categories
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          Store one primary demand category per medicine so PharmaFlow can build
-          location-aware demand intelligence later.
-        </p>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -90,7 +83,7 @@ export function MedicineDemandCategorySettings({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm font-medium text-slate-900">Primary demand category</span>
+          <span className="text-sm font-medium text-slate-900">Category</span>
           <select
             value={selectedDemandCategory}
             onChange={(event) => setSelectedDemandCategory(event.target.value)}
@@ -109,7 +102,7 @@ export function MedicineDemandCategorySettings({
 
       {selectedMedicine ? (
         <p className="mt-3 text-sm text-slate-500">
-          Current value for <span className="font-medium text-slate-800">{selectedMedicine.name}</span>:{" "}
+          Current for <span className="font-medium text-slate-800">{selectedMedicine.name}</span>:{" "}
           {formatDemandCategoryLabel(selectedMedicine.demand_category)}
         </p>
       ) : null}
@@ -121,7 +114,7 @@ export function MedicineDemandCategorySettings({
           disabled={isSaving || !selectedMedicineId}
           className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSaving ? "Saving..." : "Save demand category"}
+          {isSaving ? "Saving..." : "Save"}
         </button>
       </div>
 

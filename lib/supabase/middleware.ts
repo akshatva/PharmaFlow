@@ -3,7 +3,21 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
-const protectedPaths = ["/onboarding", "/dashboard", "/inventory", "/sales", "/insights", "/settings"];
+const protectedPaths = [
+  "/onboarding",
+  "/dashboard",
+  "/inventory",
+  "/sales",
+  "/insights",
+  "/settings",
+  "/alerts",
+  "/forecast",
+  "/reorders",
+  "/scan",
+  "/suppliers",
+  "/purchase-orders",
+  "/stock-adjustments",
+];
 const authPaths = ["/sign-in", "/sign-up"];
 
 type CookieToSet = {
