@@ -37,8 +37,8 @@ const quickActions = [
     icon: ClipboardList,
   },
   {
-    href: "/purchase-orders",
-    title: "Receive purchase orders",
+    href: "/procurement",
+    title: "Manage procurement",
     icon: FileSpreadsheet,
   },
   {

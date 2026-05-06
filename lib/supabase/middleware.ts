@@ -15,7 +15,7 @@ const protectedPaths = [
   "/reorders",
   "/scan",
   "/suppliers",
-  "/purchase-orders",
+  "/procurement",
   "/stock-adjustments",
 ];
 const authPaths = ["/sign-in", "/sign-up"];

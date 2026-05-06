@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { SectionIntro } from "@/components/layout/section-intro";
 import { ExportButton } from "@/components/reports/export-button";
 import { SetupNotice } from "@/components/layout/setup-notice";
-import { CreatePoFromReorderForm } from "@/components/purchase-orders/create-po-from-reorder-form";
+import { CreateProcurementFromReorderForm } from "@/components/procurement/create-procurement-from-reorder-form";
 import { ReorderStatusForm } from "@/components/reorders/reorder-status-form";
 import {
   buildProductForecastRows,
@@ -17,6 +17,12 @@ import {
   isDemandCategory,
   getRulesBasedReorderDecision,
 } from "@/services/inventory";
+import {
+  getSupplierRecommendationForMedicine,
+  type ReorderUrgency,
+  type SupplierCatalogCandidate,
+  type SupplierRecommendation,
+} from "@/lib/suppliers/recommendations";
 import { getLocalWeatherSnapshot } from "@/services/weather";
 import { isMissingColumnError, isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -54,17 +60,28 @@ type SupplierRecord = {
   name: string;
 };
 
-type PurchaseOrderRecord = {
+type CatalogSupplierRecord = {
+  id: string;
+  distributor_name: string;
+  active: boolean;
+};
+
+type SupplierCatalogRecord = {
+  distributor_id: string;
+  medicine_name: string;
+  unit_price: number | string;
+  available_quantity: number | null;
+  lead_time_days: number | null;
+  active: boolean;
+};
+
+type ProcurementOrderRecord = {
   id: string;
   supplier_id: string;
   created_at: string;
-  reorder_source_id: string | null;
+  reorder_item_id: string | null;
 };
 
-type PurchaseOrderItemRecord = {
-  purchase_order_id: string;
-  medicine_id: string;
-};
 
 type ReorderRow = {
   id: string;
@@ -92,6 +109,8 @@ type ReorderRow = {
   suggestedSupplierId: string | null;
   suggestedSupplierName: string | null;
   supplierSuggestionNote: string | null;
+  supplierRecommendation: SupplierRecommendation | null;
+  supplierRecommendationFallback: string;
   originalReason: string;
   status: "pending" | "ordered";
   createdAt: string;
@@ -112,6 +131,18 @@ function formatDecimal(value: number | null) {
 
   return new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: value >= 10 ? 0 : 1,
+  }).format(value);
+}
+
+function formatCurrency(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -223,8 +254,9 @@ export default async function ReordersPage() {
     { data: batchRecords, error: batchError },
     { data: salesRecords, error: salesError },
     { data: suppliers, error: suppliersError },
-    { data: purchaseOrders, error: purchaseOrdersError },
-    { data: purchaseOrderItems, error: purchaseOrderItemsError },
+    { data: catalogSuppliers, error: catalogSuppliersError },
+    { data: supplierCatalogItems, error: supplierCatalogError },
+    { data: procurementOrders, error: procurementOrdersError },
     { data: forecastResults, error: forecastError },
   ] = await Promise.all([
     supabase
@@ -252,12 +284,17 @@ export default async function ReordersPage() {
       .eq("organization_id", membership.organization_id)
       .order("name", { ascending: true }),
     supabase
-      .from("purchase_orders")
-      .select("id, supplier_id, created_at, reorder_source_id")
-      .eq("organization_id", membership.organization_id),
+      .from("distributors")
+      .select("id, distributor_name, active")
+      .eq("organization_id", membership.organization_id)
+      .order("distributor_name", { ascending: true }),
     supabase
-      .from("purchase_order_items")
-      .select("purchase_order_id, medicine_id"),
+      .from("distributor_catalog")
+      .select("distributor_id, medicine_name, unit_price, available_quantity, lead_time_days, active"),
+    supabase
+      .from("procurement_orders")
+      .select("id, supplier_id, created_at, reorder_item_id")
+      .eq("organization_id", membership.organization_id),
     supabase
       .from("forecast_results")
       .select(
@@ -271,8 +308,13 @@ export default async function ReordersPage() {
     batchError ??
     salesError ??
     suppliersError ??
-    purchaseOrdersError ??
-    purchaseOrderItemsError;
+    procurementOrdersError;
+  const supplierCatalogUnavailable =
+    isMissingRelationError(catalogSuppliersError, "distributors") ||
+    isMissingRelationError(supplierCatalogError, "distributor_catalog");
+  const supplierCatalogDataError = supplierCatalogUnavailable
+    ? null
+    : catalogSuppliersError ?? supplierCatalogError;
   let organization = organizationQuery.data;
   let organizationError = organizationQuery.error;
 
@@ -285,7 +327,7 @@ export default async function ReordersPage() {
     organizationError = null;
   }
 
-  if (baseDataError ?? organizationError) {
+  if (baseDataError ?? organizationError ?? supplierCatalogDataError) {
     if (isMissingRelationError(reorderError, "reorder_items")) {
       return (
         <div className="space-y-6">
@@ -318,7 +360,7 @@ export default async function ReordersPage() {
       );
     }
 
-    if (isMissingRelationError(purchaseOrdersError, "purchase_orders")) {
+    if (isMissingRelationError(procurementOrdersError, "procurement_orders")) {
       return (
         <div className="space-y-6">
           <SectionIntro
@@ -336,15 +378,15 @@ export default async function ReordersPage() {
 
     throw new Error(
       process.env.NODE_ENV === "development"
-        ? `Unable to load reorders: ${(baseDataError ?? organizationError)!.message}`
+        ? `Unable to load reorders: ${(baseDataError ?? organizationError ?? supplierCatalogDataError)!.message}`
         : "Unable to load reorders.",
     );
   }
 
   const stockByMedicine = new Map<string, number>();
   const recentSalesByMedicine = new Map<string, number>();
-  const purchaseOrderSourceIds = new Set<string>();
-  const purchaseOrdersById = new Map<string, PurchaseOrderRecord>();
+  const procurementOrderSourceIds = new Set<string>();
+  const procurementOrdersById = new Map<string, ProcurementOrderRecord>();
   const latestSupplierByMedicineId = new Map<
     string,
     { supplierId: string; supplierName: string | null; createdAt: string }
@@ -352,6 +394,39 @@ export default async function ReordersPage() {
   const suppliersById = new Map(
     ((suppliers ?? []) as SupplierRecord[]).map((supplier) => [supplier.id, supplier.name]),
   );
+  const catalogSuppliersById = new Map(
+    (supplierCatalogUnavailable ? [] : ((catalogSuppliers ?? []) as CatalogSupplierRecord[])).map(
+      (supplier) => [
+        supplier.id,
+        {
+          supplierName: supplier.distributor_name,
+          active: supplier.active,
+        },
+      ],
+    ),
+  );
+  const supplierCatalogCandidates: SupplierCatalogCandidate[] = (
+    supplierCatalogUnavailable ? [] : ((supplierCatalogItems ?? []) as SupplierCatalogRecord[])
+  ).flatMap((item) => {
+    const supplier = catalogSuppliersById.get(item.distributor_id);
+
+    if (!supplier) {
+      return [];
+    }
+
+    return [
+      {
+        supplierId: item.distributor_id,
+        supplierName: supplier.supplierName,
+        supplierActive: supplier.active,
+        medicineName: item.medicine_name,
+        unitPrice: Number(item.unit_price),
+        availableQuantity: item.available_quantity,
+        leadTimeDays: item.lead_time_days,
+        itemActive: item.active,
+      },
+    ];
+  });
 
   ((batchRecords ?? []) as BatchRecord[]).forEach((batch) => {
     stockByMedicine.set(
@@ -367,33 +442,11 @@ export default async function ReordersPage() {
     );
   });
 
-  ((purchaseOrders ?? []) as PurchaseOrderRecord[]).forEach((purchaseOrder) => {
-    purchaseOrdersById.set(purchaseOrder.id, purchaseOrder);
+  ((procurementOrders ?? []) as ProcurementOrderRecord[]).forEach((order) => {
+    procurementOrdersById.set(order.id, order);
 
-    if (purchaseOrder.reorder_source_id) {
-      purchaseOrderSourceIds.add(purchaseOrder.reorder_source_id);
-    }
-  });
-
-  ((purchaseOrderItems ?? []) as PurchaseOrderItemRecord[]).forEach((item) => {
-    const purchaseOrder = purchaseOrdersById.get(item.purchase_order_id);
-
-    if (!purchaseOrder) {
-      return;
-    }
-
-    const existingSuggestion = latestSupplierByMedicineId.get(item.medicine_id);
-
-    if (
-      !existingSuggestion ||
-      new Date(purchaseOrder.created_at).getTime() >
-        new Date(existingSuggestion.createdAt).getTime()
-    ) {
-      latestSupplierByMedicineId.set(item.medicine_id, {
-        supplierId: purchaseOrder.supplier_id,
-        supplierName: suppliersById.get(purchaseOrder.supplier_id) ?? null,
-        createdAt: purchaseOrder.created_at,
-      });
+    if (order.reorder_item_id) {
+      procurementOrderSourceIds.add(order.reorder_item_id);
     }
   });
 
@@ -456,6 +509,21 @@ export default async function ReordersPage() {
         forecastRow,
         fallbackDecision,
       });
+      const recommendationUrgency: ReorderUrgency =
+        decision.priority === "Urgent"
+          ? "urgent"
+          : decision.priority === "High"
+            ? "high"
+            : "normal";
+      const supplierRecommendation =
+        decision.suggestedQuantity > 0
+          ? getSupplierRecommendationForMedicine({
+              medicineName: medicine?.name ?? "Unknown medicine",
+              suggestedQuantity: decision.suggestedQuantity,
+              candidates: supplierCatalogCandidates,
+              urgency: recommendationUrgency,
+            })
+          : null;
 
       return {
         id: item.id,
@@ -483,6 +551,10 @@ export default async function ReordersPage() {
         suggestedSupplierId: supplierSuggestion?.supplierId ?? null,
         suggestedSupplierName: supplierSuggestion?.supplierName ?? null,
         supplierSuggestionNote,
+        supplierRecommendation,
+        supplierRecommendationFallback: supplierCatalogUnavailable
+          ? "Supplier catalog unavailable."
+          : "No matching suppliers found.",
         originalReason: item.reason,
         status: item.status,
         createdAt: item.created_at,
@@ -515,6 +587,8 @@ export default async function ReordersPage() {
   const orderedCount = rows.filter((row) => row.status === "ordered").length;
   const forecastDrivenCount = rows.filter((row) => row.usedForecast).length;
   const fallbackCount = rows.length - forecastDrivenCount;
+  const supplierRecommendationRows = rows.filter((row) => row.supplierRecommendation);
+  const supplierRecommendationCount = supplierRecommendationRows.length;
 
   return (
     <div className="space-y-6">
@@ -552,6 +626,65 @@ export default async function ReordersPage() {
           description="Using rules."
         />
       ) : null}
+
+      <section className="app-card p-5 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="app-kicker">Supplier Match</p>
+            <h3 className="mt-1 app-section-title">Supplier Recommendations</h3>
+          </div>
+          <span className="app-badge border-slate-200 bg-slate-50 text-slate-600">
+            {supplierRecommendationCount} match{supplierRecommendationCount === 1 ? "" : "es"}
+          </span>
+        </div>
+
+        {supplierCatalogUnavailable ? (
+          <p className="mt-5 app-panel-warning">Supplier catalog unavailable.</p>
+        ) : supplierRecommendationRows.length === 0 ? (
+          <div className="mt-5 app-empty-state">
+            <p className="app-empty-title">No matching suppliers found.</p>
+            <p className="app-empty-copy">Add matching active catalog entries to enable recommendations.</p>
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {supplierRecommendationRows.slice(0, 3).map((row) => {
+              const recommendation = row.supplierRecommendation!;
+
+              return (
+                <div key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {row.medicineName}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">
+                    {recommendation.supplierName}
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-slate-400">Price</p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {formatCurrency(recommendation.unitPrice)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Lead</p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {recommendation.leadTimeDays === null ? "—" : `${recommendation.leadTimeDays}d`}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Avail.</p>
+                      <p className="mt-1 font-medium text-slate-800">
+                        {recommendation.availableQuantity}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">{recommendation.reason}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="app-card">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
@@ -663,11 +796,30 @@ export default async function ReordersPage() {
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Supplier</p>
-                      <p className="mt-1 text-sm font-medium text-slate-900">
-                        {row.suggestedSupplierName ?? "Select manually"}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">{row.supplierSuggestionNote}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Supplier match</p>
+                      {row.supplierRecommendation ? (
+                        <div className="mt-2 space-y-2">
+                          <p className="text-sm font-medium text-slate-900">
+                            {row.supplierRecommendation.supplierName}
+                          </p>
+                          <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
+                            <span>{formatCurrency(row.supplierRecommendation.unitPrice)}</span>
+                            <span>
+                              {row.supplierRecommendation.leadTimeDays === null
+                                ? "Lead —"
+                                : `${row.supplierRecommendation.leadTimeDays}d lead`}
+                            </span>
+                            <span>{row.supplierRecommendation.availableQuantity} available</span>
+                          </div>
+                          <p className="text-xs leading-5 text-slate-500">
+                            {row.supplierRecommendation.reason}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                          {row.supplierRecommendationFallback}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -677,15 +829,18 @@ export default async function ReordersPage() {
                         No draft suggested.
                       </p>
                     ) : (
-                      <CreatePoFromReorderForm
+                      <CreateProcurementFromReorderForm
                         reorderItemId={row.id}
+                        medicineId={row.medicineId}
+                        medicineName={row.medicineName}
                         suggestedQuantity={row.suggestedQuantity}
                         suppliers={(suppliers ?? []) as SupplierRecord[]}
                         suggestedSupplierId={row.suggestedSupplierId}
                         suggestedSupplierName={row.suggestedSupplierName}
+                        suggestedUnitPrice={row.supplierRecommendation?.unitPrice}
                         recommendation={`${row.recommendation} • ${row.priority} priority`}
                         supplierSuggestionNote={row.supplierSuggestionNote}
-                        disabled={purchaseOrderSourceIds.has(row.id)}
+                        disabled={procurementOrderSourceIds.has(row.id)}
                       />
                     )}
                   </div>
@@ -704,7 +859,7 @@ export default async function ReordersPage() {
                     <th>Risk</th>
                     <th>Confidence</th>
                     <th>Recommendation</th>
-                    <th>Supplier</th>
+                    <th>Supplier Match</th>
                     <th>Status</th>
                     <th>Draft PO</th>
                   </tr>
@@ -782,10 +937,27 @@ export default async function ReordersPage() {
                         </div>
                       </td>
                       <td className="border-b border-slate-100 px-3 py-4 text-slate-700">
-                        <div className="space-y-1">
-                          <p>{row.suggestedSupplierName ?? "Select manually"}</p>
-                          <p className="text-xs text-slate-500">{row.supplierSuggestionNote}</p>
-                        </div>
+                        {row.supplierRecommendation ? (
+                          <div className="space-y-2">
+                            <p className="font-medium text-slate-900">
+                              {row.supplierRecommendation.supplierName}
+                            </p>
+                            <div className="space-y-1 text-xs text-slate-500">
+                              <p>{formatCurrency(row.supplierRecommendation.unitPrice)}</p>
+                              <p>
+                                {row.supplierRecommendation.leadTimeDays === null
+                                  ? "Lead —"
+                                  : `${row.supplierRecommendation.leadTimeDays}d lead`}{" "}
+                                • {row.supplierRecommendation.availableQuantity} available
+                              </p>
+                              <p>{row.supplierRecommendation.reason}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs font-medium text-slate-500">
+                            {row.supplierRecommendationFallback}
+                          </p>
+                        )}
                       </td>
                       <td className="border-b border-slate-100 px-3 py-4">
                         <ReorderStatusForm reorderItemId={row.id} initialStatus={row.status} />
@@ -794,15 +966,18 @@ export default async function ReordersPage() {
                         {row.recommendation === "Avoid Reorder" || row.suggestedQuantity <= 0 ? (
                           <span className="text-xs font-medium text-slate-500">No draft suggested</span>
                         ) : (
-                          <CreatePoFromReorderForm
+                          <CreateProcurementFromReorderForm
                             reorderItemId={row.id}
+                            medicineId={row.medicineId}
+                            medicineName={row.medicineName}
                             suggestedQuantity={row.suggestedQuantity}
                             suppliers={(suppliers ?? []) as SupplierRecord[]}
                             suggestedSupplierId={row.suggestedSupplierId}
                             suggestedSupplierName={row.suggestedSupplierName}
+                            suggestedUnitPrice={row.supplierRecommendation?.unitPrice}
                             recommendation={`${row.recommendation} • ${row.priority} priority`}
                             supplierSuggestionNote={row.supplierSuggestionNote}
-                            disabled={purchaseOrderSourceIds.has(row.id)}
+                            disabled={procurementOrderSourceIds.has(row.id)}
                           />
                         )}
                       </td>

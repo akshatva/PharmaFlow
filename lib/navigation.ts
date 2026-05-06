@@ -8,6 +8,6 @@ export const appNavigation = [
   { href: "/reorders", label: "Reorders", icon: "reorders" },
   { href: "/stock-adjustments", label: "Stock Adjustments", icon: "stockAdjustments" },
   { href: "/suppliers", label: "Suppliers", icon: "suppliers" },
-  { href: "/purchase-orders", label: "Purchase Orders", icon: "purchaseOrders" },
+  { href: "/procurement", label: "Procurement", icon: "purchaseOrders" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ] as const;

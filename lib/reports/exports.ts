@@ -8,6 +8,11 @@ import {
   type ProductForecastRow,
 } from "@/lib/forecasting/product";
 import { isMissingRelationError } from "@/lib/supabase/errors";
+import {
+  getSupplierRecommendationForMedicine,
+  type ReorderUrgency,
+  type SupplierCatalogCandidate,
+} from "@/lib/suppliers/recommendations";
 import { getRulesBasedReorderDecision } from "@/services/inventory";
 
 type RouteOrganizationContextResult = {
@@ -348,6 +353,8 @@ export async function getReorderExportRows(
     { data: batchRecords, error: batchError },
     { data: salesRecords, error: salesError },
     { data: forecastResults, error: forecastError },
+    { data: catalogSuppliers, error: catalogSuppliersError },
+    { data: supplierCatalogItems, error: supplierCatalogError },
   ] = await Promise.all([
     supabase
       .from("reorder_items")
@@ -369,15 +376,71 @@ export async function getReorderExportRows(
         "medicine_id, model_name, forecast_7d, forecast_30d, daily_demand_avg, confidence_level, error_metric_name, error_metric_value, history_days_used, generated_at",
       )
       .eq("organization_id", organizationId),
+    supabase
+      .from("distributors")
+      .select("id, distributor_name, active")
+      .eq("organization_id", organizationId),
+    supabase
+      .from("distributor_catalog")
+      .select("distributor_id, medicine_name, unit_price, available_quantity, lead_time_days, active"),
   ]);
 
   const forecastUnavailable = Boolean(
     forecastError && isMissingRelationError(forecastError, "forecast_results"),
   );
-  const dataError = reorderError ?? batchError ?? salesError ?? (forecastUnavailable ? null : forecastError);
+  const catalogUnavailable =
+    isMissingRelationError(catalogSuppliersError, "distributors") ||
+    isMissingRelationError(supplierCatalogError, "distributor_catalog");
+  const dataError =
+    reorderError ??
+    batchError ??
+    salesError ??
+    (forecastUnavailable ? null : forecastError) ??
+    (catalogUnavailable ? null : (catalogSuppliersError ?? supplierCatalogError));
   if (dataError) {
     throw dataError;
   }
+
+  // Build supplier catalog candidates for recommendations
+  type CatalogSupplierRecord = { id: string; distributor_name: string; active: boolean };
+  type SupplierCatalogRecord = {
+    distributor_id: string;
+    medicine_name: string;
+    unit_price: number | string;
+    available_quantity: number | null;
+    lead_time_days: number | null;
+    active: boolean;
+  };
+
+  const catalogSuppliersById = new Map(
+    (catalogUnavailable ? [] : ((catalogSuppliers ?? []) as CatalogSupplierRecord[])).map(
+      (supplier) => [
+        supplier.id,
+        { supplierName: supplier.distributor_name, active: supplier.active },
+      ],
+    ),
+  );
+
+  const supplierCatalogCandidates: SupplierCatalogCandidate[] = (
+    catalogUnavailable ? [] : ((supplierCatalogItems ?? []) as SupplierCatalogRecord[])
+  ).flatMap((item) => {
+    const supplier = catalogSuppliersById.get(item.distributor_id);
+    if (!supplier) {
+      return [];
+    }
+    return [
+      {
+        supplierId: item.distributor_id,
+        supplierName: supplier.supplierName,
+        supplierActive: supplier.active,
+        medicineName: item.medicine_name,
+        unitPrice: Number(item.unit_price),
+        availableQuantity: item.available_quantity,
+        leadTimeDays: item.lead_time_days,
+        itemActive: item.active,
+      },
+    ];
+  });
 
   const stockByMedicine = new Map<string, number>();
   ((batchRecords ?? []) as { medicine_id: string; quantity: number }[]).forEach((batch) => {
@@ -432,6 +495,23 @@ export async function getReorderExportRows(
       fallbackDecision,
     });
 
+    const recommendationUrgency: ReorderUrgency =
+      decision.priority === "Urgent"
+        ? "urgent"
+        : decision.priority === "High"
+          ? "high"
+          : "normal";
+
+    const supplierRecommendation =
+      decision.suggestedQuantity > 0
+        ? getSupplierRecommendationForMedicine({
+            medicineName: medicine?.name ?? "Unknown medicine",
+            suggestedQuantity: decision.suggestedQuantity,
+            candidates: supplierCatalogCandidates,
+            urgency: recommendationUrgency,
+          })
+        : null;
+
     return {
       medicine_name: medicine?.name ?? "Unknown medicine",
       current_stock: currentStock,
@@ -439,6 +519,11 @@ export async function getReorderExportRows(
       recent_sales_30d: recentSales,
       recommendation: decision.recommendation,
       suggested_quantity: decision.suggestedQuantity,
+      recommended_supplier: supplierRecommendation?.supplierName ?? null,
+      supplier_unit_price: supplierRecommendation?.unitPrice ?? null,
+      supplier_lead_time_days: supplierRecommendation?.leadTimeDays ?? null,
+      supplier_available_qty: supplierRecommendation?.availableQuantity ?? null,
+      supplier_reason: supplierRecommendation?.reason ?? "No matching suppliers found.",
     };
   });
 }

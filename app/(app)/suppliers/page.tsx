@@ -1,23 +1,64 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import {
+  DistributorManager,
+  type DistributorListItem,
+} from "@/components/distributors/distributor-manager";
 import { SectionIntro } from "@/components/layout/section-intro";
 import { SetupNotice } from "@/components/layout/setup-notice";
-import { SupplierManager } from "@/components/suppliers/supplier-manager";
 import { isMissingRelationError } from "@/lib/supabase/errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+type SuppliersPageProps = {
+  searchParams?: Promise<{
+    query?: string;
+    status?: string;
+  }>;
+};
+
 type SupplierRecord = {
   id: string;
-  name: string;
-  contact_person: string | null;
+  distributor_name: string;
+  contact_name: string | null;
   phone: string | null;
   email: string | null;
-  notes: string | null;
+  city: string | null;
+  state: string | null;
+  active: boolean;
   created_at: string;
 };
 
-export default async function SuppliersPage() {
+type CatalogCountRecord = {
+  distributor_id: string;
+};
+
+function normalizeStatus(value: string | undefined): "all" | "active" | "inactive" {
+  return value === "active" || value === "inactive" ? value : "all";
+}
+
+function matchesSearch(supplier: DistributorListItem, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  const normalizedQuery = query.toLowerCase();
+  return [
+    supplier.distributorName,
+    supplier.contactName,
+    supplier.phone,
+    supplier.email,
+    supplier.city,
+    supplier.state,
+  ]
+    .filter(Boolean)
+    .some((value) => value!.toLowerCase().includes(normalizedQuery));
+}
+
+export default async function SuppliersPage({ searchParams }: SuppliersPageProps) {
+  const params = await searchParams;
+  const query = String(params?.query ?? "").trim();
+  const status = normalizeStatus(params?.status);
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -40,23 +81,23 @@ export default async function SuppliersPage() {
   }
 
   const { data: suppliers, error } = await supabase
-    .from("suppliers")
-    .select("id, name, contact_person, phone, email, notes, created_at")
+    .from("distributors")
+    .select("id, distributor_name, contact_name, phone, email, city, state, active, created_at")
     .eq("organization_id", membership.organization_id)
-    .order("created_at", { ascending: false });
+    .order("distributor_name", { ascending: true });
 
   if (error) {
-    if (isMissingRelationError(error, "suppliers")) {
+    if (isMissingRelationError(error, "distributors")) {
       return (
         <div className="space-y-6">
           <SectionIntro
             eyebrow="Procurement"
             title="Suppliers"
-            description="Maintain a lightweight supplier list so reorders can turn into purchase orders quickly."
+            description="Supplier directory and catalog foundation."
           />
           <SetupNotice
-            title="Supplier table not available yet"
-            description="The `suppliers` table is missing in your connected Supabase project. Run the supplier and purchase order SQL in Supabase, reload the schema, and refresh the app."
+            title="Suppliers not ready"
+            description="Apply the supplier foundation migration and refresh."
           />
         </div>
       );
@@ -69,34 +110,79 @@ export default async function SuppliersPage() {
     );
   }
 
+  const supplierRows = (suppliers ?? []) as SupplierRecord[];
+  const supplierIds = supplierRows.map((supplier) => supplier.id);
+  const catalogCounts = new Map<string, number>();
+
+  if (supplierIds.length) {
+    const { data: catalogRows, error: catalogError } = await supabase
+      .from("distributor_catalog")
+      .select("distributor_id")
+      .in("distributor_id", supplierIds);
+
+    if (catalogError) {
+      if (isMissingRelationError(catalogError, "distributor_catalog")) {
+        return (
+          <div className="space-y-6">
+            <SectionIntro
+              eyebrow="Procurement"
+              title="Suppliers"
+              description="Supplier directory and catalog foundation."
+            />
+            <SetupNotice
+              title="Supplier catalog not ready"
+              description="Apply the supplier catalog migration and refresh."
+            />
+          </div>
+        );
+      }
+
+      throw new Error(
+        process.env.NODE_ENV === "development"
+          ? `Unable to load supplier catalog counts: ${catalogError.message}`
+          : "Unable to load supplier catalog counts.",
+      );
+    }
+
+    ((catalogRows ?? []) as CatalogCountRecord[]).forEach((row) => {
+      catalogCounts.set(row.distributor_id, (catalogCounts.get(row.distributor_id) ?? 0) + 1);
+    });
+  }
+
+  const rows = supplierRows
+    .map((supplier): DistributorListItem => ({
+      id: supplier.id,
+      distributorName: supplier.distributor_name,
+      contactName: supplier.contact_name,
+      phone: supplier.phone,
+      email: supplier.email,
+      city: supplier.city,
+      state: supplier.state,
+      active: supplier.active,
+      catalogCount: catalogCounts.get(supplier.id) ?? 0,
+      createdAt: supplier.created_at,
+    }))
+    .filter((supplier) => {
+      if (status === "active" && !supplier.active) {
+        return false;
+      }
+
+      if (status === "inactive" && supplier.active) {
+        return false;
+      }
+
+      return matchesSearch(supplier, query);
+    });
+
   return (
     <div className="space-y-6">
       <SectionIntro
         eyebrow="Procurement"
         title="Suppliers"
-        description="Maintain a lightweight supplier list so reorders can turn into purchase orders quickly."
+        description="Supplier directory and catalog foundation."
       />
 
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/suppliers/analytics"
-          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          Open supplier analytics
-        </Link>
-      </div>
-
-      <SupplierManager
-        suppliers={((suppliers ?? []) as SupplierRecord[]).map((supplier) => ({
-          id: supplier.id,
-          name: supplier.name,
-          contactPerson: supplier.contact_person,
-          phone: supplier.phone,
-          email: supplier.email,
-          notes: supplier.notes,
-          createdAt: supplier.created_at,
-        }))}
-      />
+      <DistributorManager distributors={rows} query={query} status={status} basePath="/suppliers" />
     </div>
   );
 }

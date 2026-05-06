@@ -74,7 +74,7 @@ export function AppSidebar() {
           <div className="flex w-max gap-1.5">
             {appNavigation.map((item) => {
               const Icon = icons[item.icon] ?? LayoutDashboard;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               return (
                 <Link
@@ -128,7 +128,7 @@ export function AppSidebar() {
                 <div className="space-y-0.5">
                   {groupNavItems.map((item) => {
                     const Icon = icons[item.icon] ?? LayoutDashboard;
-                    const isActive = pathname === item.href;
+                    const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
                     return (
                       <Link
